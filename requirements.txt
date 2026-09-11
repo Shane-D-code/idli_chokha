@@ -1,6 +1,36 @@
-pandas>=2.0.0
+# TOOFAN Core Dependencies
 numpy>=1.24.0
+pandas>=2.0.0
+scipy>=1.10.0
 scikit-learn>=1.3.0
 xgboost>=2.0.0
-tensorflow>=2.12.0
+lightgbm>=4.0.0
+pydantic>=2.5.0
+PyYAML>=6.0
+networkx>=3.1
+joblib>=1.3.0
+
+# Data handling
+xarray>=2023.10.0
+netCDF4>=1.6.0
+rasterio>=1.3.0
+
+# Deep learning (optional, for specific models)
+torch>=2.0.0
+torchvision>=0.15.0
+tensorflow>=2.13.0
+
+# Visualization
 matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Utilities
+tqdm>=4.65.0
+requests>=2.31.0
+
+# Testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
+
+# SHAP for explainability
+shap>=0.42.0

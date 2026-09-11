@@ -1,0 +1,24 @@
+{
+  "trajectory_vlt3p": {
+    "name": "trajectory",
+    "version": "lt3p",
+    "model_type": "trajectory",
+    "training_dataset": "deployment package (LT3P distilled student)",
+    "feature_version": "v2",
+    "training_period": [
+      "",
+      ""
+    ],
+    "validation_metrics": {},
+    "test_metrics": {},
+    "preprocessing_version": "v2",
+    "checkpoint_path": "best_cyclone_model_lt3p_distilled.pth",
+    "calibration_artifact": null,
+    "timestamp": "2026-09-04T20:51:56.629637",
+    "git_commit": "a6df99a0b675",
+    "configuration": {
+      "scaler_path": "scalers.pkl"
+    },
+    "file_hash": "b9cfc710aa55881dabc4149ebbdd6ac57f814bb93a5118c22b9e41209d57765b"
+  }
+}

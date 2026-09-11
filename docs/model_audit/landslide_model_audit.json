@@ -1,0 +1,65 @@
+{
+  "audit": "TOOFAN Landslide Model Forensic Audit",
+  "audit_date": "2026-09-02",
+  "audit_type": "FORENSIC_DISCOVERY_AND_HEALTH_CHECK",
+  "read_only": true,
+
+  "model_found": false,
+  "artifact": null,
+  "sha256": null,
+  "framework": null,
+  "model_class": null,
+  "feature_count": null,
+  "feature_names": null,
+  "target": null,
+  "prediction_type": null,
+  "prediction_horizon": null,
+  "preprocessing": null,
+
+  "discovery_notes": [
+    "No file or artifact name contains 'landslide', 'slide', 'suscept', or 'slope'.",
+    "All 16 artifacts in 'genisis models/' are Genesis tropical-cyclone formation models (34 oceanic/atmospheric features, binary genesis_24h target).",
+    "No trained landslide artifact exists anywhere in the repository.",
+    "stage17_hazard_maps contains only static PNG hazard maps (visualization, not an ML model)."
+  ],
+
+  "loads": false,
+  "load_reason": "NO ARTIFACT PRESENT",
+  "inference_verified": false,
+  "inference_reason": "NO ARTIFACT / NO INPUT FIXTURE",
+  "predict_proba_supported": null,
+
+  "adapter_verified": false,
+  "adapter_notes": "src/models/landslide/adapter.py exists but loads no ML artifact; returns STATIC_SUSCEPTIBILITY stub",
+  "adapter_artifact_path": null,
+  "adapter_model_version": "unavailable",
+  "adapter_framework": "none",
+
+  "factory_verified": false,
+  "factory_notes": "Landslide is NOT registered in ModelFactory; only genesis, genesis_lightgbm, genesis_soft_voting_ensemble are registered",
+
+  "orchestrator_verified": false,
+  "orchestrator_notes": "ModuleName.LANDSLIDE hook exists, but the model registry (models/registry/) is empty; _load_module_model returns None; landslide NOT in dependency graph",
+
+  "genesis_isolation": true,
+  "genesis_isolation_notes": [
+    "Genesis LightGBM->tc_genesis_lightgbm_300_OPTIMIZED.joblib (CORRECT)",
+    "Genesis XGBoost->tc_genesis_xgboost_300_OPTIMIZED.joblib (CORRECT)",
+    "Genesis RandomForest->tc_genesis_randomforest_300_OPTIMIZED.joblib (CORRECT)",
+    "Genesis adapter uses explicit ARTIFACTS dict + _GenesisComponent estimator guard (lightgbm/xgboost/randomforest only); no wildcard loading; no cross-loading with landslide"
+  ],
+
+  "native_runtime": true,
+  "native_runtime_notes": "Full test suite 143/143 PASS; shared canonical libomp + OMP_NUM_THREADS=1 + n_jobs=1 safeguards intact; no crash reintroduced",
+
+  "fidelity": "NOT VERIFIED",
+  "fidelity_reason": "No original landslide inference script and no landslide artifact exist",
+
+  "scientifically_validated": false,
+  "scientific_notes": "No landslide metrics, dataset, train/test split, CV, or leakage assessment exists",
+
+  "model_type_classification": "UNKNOWN",
+  "model_type_classification_notes": "STATIC SUSCEPTIBILITY visualization only (stage17_hazard_maps PNGs); NOT dynamic event prediction; NOT cyclone-triggered forecasting; no ML model exists",
+
+  "status": "NOT FOUND"
+}

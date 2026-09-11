@@ -1,0 +1,1 @@
+"""Trajectory (track) model module for orchestrator integration."""

@@ -40,3 +40,4 @@ model*_checkpoint.csv
 rain/model/rainfall_regressor_12.pkl
 *.tmp
 *.log
+node_modules/
