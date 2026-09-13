@@ -174,9 +174,11 @@ class TrajectoryModelAdapter(TrajectoryModel):
 
         Returns the raw result dict, per-horizon sigma-km estimates, and the
         per-horizon displacement vectors. A growing lead-time floor
-        (10 + 2.5*h km, matching empirical track error growth) is applied so
-        early-horizon cones stay plausible when the learned uncertainty head
-        saturates.
+        (10 + 2.5*h km) is applied as a lower bound. In practice the learned
+        uncertainty head saturates at its output clamp (log_std ~ +5 → ~209.9 km
+        per horizon) for virtually all inputs, well above the floor, so the
+        reported sigma is dominated by the saturated head and does not encode
+        track-error growth.
         """
         observations = self._build_history_observations(cyclone_state)
         result = self._inference.predict(observations)
@@ -252,10 +254,26 @@ class TrajectoryModelAdapter(TrajectoryModel):
             confidence=confidence,
             model_version=self.model_info.version,
             timestamp=datetime.utcnow(),
+            status="LIMITED/UNVERIFIED",
+            explanation=(
+                "Forecast track is produced by the runnable model, but the "
+                "uncertainty band is not calibrated: the learned uncertainty "
+                "head saturates at its output clamp (~209.9 km) across "
+                "horizons, so per-horizon sigma_km is a broad constant bound "
+                "that does NOT grow with lead time. Epistemic uncertainty is "
+                "not quantified."
+            ),
         )
 
     def predict_with_uncertainty(self, cyclone_state: CycloneState) -> tuple[TrackPrediction, dict]:
-        """Predict with uncertainty estimates."""
+        """Predict with uncertainty estimates.
+
+        The returned dict does not claim calibrated or horizon-dependent
+        uncertainty. The learned uncertainty head is observed to saturate at
+        its output clamp (~209.9 km) for all horizons, so ``aleatoric_km`` is a
+        broad constant bound (status ``LIMITED/UNVERIFIED``) and epistemic
+        uncertainty is NOT quantified.
+        """
         if not self._is_loaded:
             raise RuntimeError("Model not loaded. Call load() first.")
 
@@ -266,8 +284,16 @@ class TrajectoryModelAdapter(TrajectoryModel):
 
         uncertainty = {
             "aleatoric_km": aleatoric_km,
-            "epistemic_scale": [1.0] * len(self._horizons or result["forecast_hours"]),
+            "epistemic_scale": None,
             "horizons_h": self._horizons or result["forecast_hours"],
+            "status": "LIMITED/UNVERIFIED",
+            "notes": [
+                "learned uncertainty head saturates at its output clamp "
+                "(~209.9 km) across horizons; per-horizon sigma is a broad "
+                "constant bound, NOT calibrated to observed track error, and "
+                "does NOT grow with lead time",
+                "epistemic (model/parameter) uncertainty not quantified",
+            ],
         }
 
         prediction = self.predict(cyclone_state)
@@ -281,6 +307,12 @@ class TrajectoryModelAdapter(TrajectoryModel):
             "horizons_h": self._horizons,
             "note": "Displacement (east/north km) decoded per horizon from fused "
                     "track + physics-history Transformer.",
+            "uncertainty_status": "LIMITED/UNVERIFIED",
+            "uncertainty_note": "Learned uncertainty head output saturates at "
+                    "its clamp (~209.9 km) across horizons; reported sigma_km is "
+                    "a broad constant bound, not calibrated to observed track "
+                    "error and not growing with lead time. Epistemic "
+                    "uncertainty not quantified.",
         }
 
 

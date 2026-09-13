@@ -40,11 +40,14 @@ class MockModel(BaseModel):
     def validate_input(self, input_data) -> bool:
         return True
 
-    def predict(self, input_data):
+    def predict(self, *args, **kwargs):
         if not self.should_succeed:
             raise RuntimeError("Mock model failure")
         
-        # Return appropriate schema objects based on model type
+        # Return appropriate schema objects based on model type. The module
+        # signature is positional-variadic so the same mock can stand in for
+        # every module's predict interface (some take only the CycloneState,
+        # others also consume upstream outputs).
         if self.model_info.model_type == 'genesis':
             return GenesisPrediction(
                 probability_24h=0.5,
@@ -297,6 +300,14 @@ class TestPipelineOrchestrator:
                 assert isinstance(result, UnifiedForecastState)
                 assert result.cyclone.storm_id == '2024-001'
 
+                # Every declared module actually ran (guards against the old
+                # behavior where unloaded modules silently vanished from the
+                # graph and were skipped).
+                assert set(orchestrator.results) == set(ModuleName)
+                assert all(r.status == "SUCCESS" for r in orchestrator.results.values())
+                assert result.genesis is not None
+                assert result.track is not None
+
     def test_single_module_execution(self):
         """Test executing single module."""
         mock_model = MockModel('genesis')
@@ -335,6 +346,141 @@ class TestPipelineOrchestrator:
                 )
 
                 assert result.genesis is not None
+
+    def test_all_declared_modules_registered(self):
+        """Every module in DEFAULT_DEPENDENCIES is a DAG node, even when no
+        model artifact loads."""
+        self.mock_registry.get.return_value = None
+        with patch('src.pipeline.orchestrator.get_registry', return_value=self.mock_registry):
+            with patch('src.pipeline.orchestrator.CycloneStateBuilder'):
+                orchestrator = PipelineOrchestrator(self.config, self.mock_registry)
+                assert set(orchestrator.dependency_graph.modules) == set(
+                    PipelineOrchestrator.DEFAULT_DEPENDENCIES.keys())
+
+    def test_dag_structure_matches_default_dependencies(self):
+        """DAG edges match DEFAULT_DEPENDENCIES exactly."""
+        self.mock_registry.get.return_value = None
+        with patch('src.pipeline.orchestrator.get_registry', return_value=self.mock_registry):
+            with patch('src.pipeline.orchestrator.CycloneStateBuilder'):
+                orchestrator = PipelineOrchestrator(self.config, self.mock_registry)
+                for module, deps in PipelineOrchestrator.DEFAULT_DEPENDENCIES.items():
+                    assert set(orchestrator.dependency_graph.get_dependencies(module)) == set(deps)
+
+    def test_missing_artifacts_do_not_remove_dag_nodes(self):
+        """Missing model artifacts leave every graph node intact (module model
+        becomes None instead of the node disappearing)."""
+        self.mock_registry.get.return_value = None
+        with patch('src.pipeline.orchestrator.get_registry', return_value=self.mock_registry):
+            with patch('src.pipeline.orchestrator.CycloneStateBuilder'):
+                orchestrator = PipelineOrchestrator(self.config, self.mock_registry)
+                modules = orchestrator.dependency_graph.modules
+                assert set(modules) == set(PipelineOrchestrator.DEFAULT_DEPENDENCIES.keys())
+                assert all(spec.model is None for spec in modules.values())
+
+    def test_execution_order_full_graph(self):
+        """Topological order respects every declared dependency edge."""
+        self.mock_registry.get.return_value = None
+        with patch('src.pipeline.orchestrator.get_registry', return_value=self.mock_registry):
+            with patch('src.pipeline.orchestrator.CycloneStateBuilder'):
+                orchestrator = PipelineOrchestrator(self.config, self.mock_registry)
+                order = orchestrator.dependency_graph.get_execution_order(list(ModuleName))
+                index = {m.value: i for i, m in enumerate(order)}
+                for module, deps in PipelineOrchestrator.DEFAULT_DEPENDENCIES.items():
+                    for dep in deps:
+                        assert index[dep.value] < index[module.value]
+
+    def test_unavailable_modules_report_explicit_status(self):
+        """With no models available, every model-backed module reports an
+        explicit UNAVAILABLE status with a reason and a None output (no fake
+        results). The model-less hazard engine still builds the unified state."""
+        self.mock_registry.get.return_value = None
+        with patch('src.pipeline.orchestrator.get_registry', return_value=self.mock_registry):
+            with patch('src.pipeline.orchestrator.CycloneStateBuilder') as mock_builder:
+                mock_state = CycloneState(
+                    storm_id='2024-001',
+                    basin=Basin.BAY_OF_BENGAL,
+                    timestamp=datetime.now(timezone.utc),
+                    latitude=15.0,
+                    longitude=85.0,
+                )
+                mock_builder.return_value.build_from_storm_id.return_value = mock_state
+
+                orchestrator = PipelineOrchestrator(self.config, self.mock_registry)
+                orchestrator.state_builder = mock_builder.return_value
+                result = orchestrator.execute(
+                    storm_id='2024-001',
+                    basin='BOB',
+                    reference_time=datetime.now(timezone.utc),
+                    mode='full',
+                )
+
+                for name in PipelineOrchestrator.DEFAULT_DEPENDENCIES:
+                    if name == ModuleName.HAZARD_ENGINE:
+                        continue
+                    pres = orchestrator.results[name]
+                    assert pres.status == "UNAVAILABLE", name
+                    assert not pres.success
+                    assert pres.output is None
+                    assert pres.reason is not None
+
+                assert orchestrator.results[ModuleName.HAZARD_ENGINE].status == "SUCCESS"
+                assert result.genesis is None
+                assert result.track is None
+
+    def test_downstream_unavailable_when_dependency_missing(self):
+        """A module whose required upstream output is unavailable reports
+        UNAVAILABLE with a dependency reason instead of succeeding."""
+        self.mock_registry.get.return_value = None
+        with patch('src.pipeline.orchestrator.get_registry', return_value=self.mock_registry):
+            with patch('src.pipeline.orchestrator.CycloneStateBuilder') as mock_builder:
+                mock_state = CycloneState(
+                    storm_id='2024-001',
+                    basin=Basin.BAY_OF_BENGAL,
+                    timestamp=datetime.now(timezone.utc),
+                    latitude=15.0,
+                    longitude=85.0,
+                )
+                mock_builder.return_value.build_from_storm_id.return_value = mock_state
+
+                orchestrator = PipelineOrchestrator(self.config, self.mock_registry)
+                orchestrator.state_builder = mock_builder.return_value
+
+                # Provide models for genesis, trajectory and the downstream
+                # consumers; leave intensity/ri/recurvature without models so
+                # dependency-unavailability is what fails rainfall/wind/flood/landslide.
+                for name, model_type in [
+                    (ModuleName.GENESIS, 'genesis'),
+                    (ModuleName.TRAJECTORY, 'trajectory'),
+                    (ModuleName.RAINFALL, 'rainfall'),
+                    (ModuleName.WIND, 'wind'),
+                    (ModuleName.FLOOD, 'flood'),
+                    (ModuleName.LANDSLIDE, 'landslide'),
+                ]:
+                    orchestrator.dependency_graph.modules[name].model = MockModel(model_type)
+
+                orchestrator.execute(
+                    storm_id='2024-001',
+                    basin='BOB',
+                    reference_time=datetime.now(timezone.utc),
+                    mode='full',
+                )
+
+                assert orchestrator.results[ModuleName.GENESIS].status == "SUCCESS"
+                assert orchestrator.results[ModuleName.TRAJECTORY].status == "SUCCESS"
+
+                assert orchestrator.results[ModuleName.INTENSITY].status == "UNAVAILABLE"
+
+                # rainfall/wind need intensity upstream -> UNAVAILABLE
+                assert 'intensity' in orchestrator.results[ModuleName.RAINFALL].reason
+                assert 'intensity' in orchestrator.results[ModuleName.WIND].reason
+                # flood/landslide need rainfall upstream -> UNAVAILABLE
+                assert 'rainfall' in orchestrator.results[ModuleName.FLOOD].reason
+                assert 'rainfall' in orchestrator.results[ModuleName.LANDSLIDE].reason
+
+                assert orchestrator.results[ModuleName.RAINFALL].output is None
+                assert orchestrator.results[ModuleName.WIND].output is None
+                assert orchestrator.results[ModuleName.FLOOD].output is None
+                assert orchestrator.results[ModuleName.LANDSLIDE].output is None
 
 
 class TestModuleName:

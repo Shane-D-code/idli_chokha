@@ -39,7 +39,7 @@ export default function WindPage() {
   return (
     <div className="page">
       <div className="page-head">
-        <div className="page-kicker">Forecast · Hazard</div>
+        <div className="page-kicker">Hazard</div>
         <h1 className="page-title">Wind</h1>
         <p className="page-sub">Wind field analysis — maximum wind and wind radii by zone.</p>
         <div className="row" style={{ marginTop: "var(--sp-3)" }}>

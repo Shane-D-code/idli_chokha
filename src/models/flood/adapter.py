@@ -7,23 +7,20 @@ Single event, spatial holdout validation, no temporal generalization.
 from __future__ import annotations
 
 import warnings
-import joblib
-import numpy as np
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Any
+from typing import Any
 
-import pandas as pd
+import joblib
+import numpy as np
 
 from src.core.schema import (
     CycloneState,
     FloodPrediction,
     RainfallPrediction,
     WindFieldPrediction,
-    RiskLevel,
 )
 from src.models.base import (
-    BaseModel,
     FloodModel,
     ModelInfo,
     ModelMetadata,
@@ -88,12 +85,12 @@ class FloodModelAdapter(FloodModel):
         """Validate inputs - requires rainfall prediction at minimum."""
         if not isinstance(input_data, tuple) and len(input_data) < 2:
             return False
-        rainfall_pred, wind_pred = input_data[0], input_data[1]
+        rainfall_pred = input_data[0]
         return rainfall_pred is not None
 
     def _build_features(self, rainfall_prediction: RainfallPrediction,
-                         wind_prediction: Optional[WindFieldPrediction],
-                         cyclone_state: Optional[CycloneState]) -> np.ndarray:
+                         wind_prediction: WindFieldPrediction | None,
+                         cyclone_state: CycloneState | None) -> np.ndarray:
         """Build feature vector from upstream predictions.
 
         The FANI flood training grid includes:
@@ -115,14 +112,14 @@ class FloodModelAdapter(FloodModel):
         return np.array([[]], dtype=np.float32)
 
     def predict(self, rainfall_prediction: RainfallPrediction,
-                wind_prediction: Optional[WindFieldPrediction] = None,
-                cyclone_state: Optional[CycloneState] = None) -> FloodPrediction:
+                wind_prediction: WindFieldPrediction | None = None,
+                cyclone_state: CycloneState | None = None) -> FloodPrediction:
         """Return BASELINE status - requires full geographic preprocessing."""
         if not self._is_loaded:
             raise RuntimeError("Model not loaded. Call load() first.")
 
         # Check if rainfall prediction has actual grids (not BASELINE)
-        has_rainfall_grids = any([
+        has_rainfall_grids = rainfall_prediction is not None and any([
             rainfall_prediction.rainfall_3h is not None,
             rainfall_prediction.rainfall_6h is not None,
             rainfall_prediction.rainfall_12h is not None,

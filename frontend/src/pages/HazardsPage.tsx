@@ -34,7 +34,7 @@ export default function HazardsPage() {
   return (
     <div className="page">
       <div className="page-head">
-        <div className="page-kicker">Forecast</div>
+        <div className="page-kicker">Hazard</div>
         <h1 className="page-title">Hazards</h1>
         <p className="page-sub">Rainfall, wind, and flood hazard analysis on a single view.</p>
         <div className="row" style={{ marginTop: "var(--sp-3)" }}><DemoBanner /></div>
@@ -59,7 +59,14 @@ export default function HazardsPage() {
         <div className="hazard-module">
           <span className="lbl">Flood Overall Risk</span>
           <div style={{ marginTop: 4 }}>
-            {flood?.overallRisk ? <RiskPill severity={flood.overallRisk} /> : <span className="muted-3">—</span>}
+            {flood?.status &&
+            flood.status.status !== "UNAVAILABLE" &&
+            flood.status.status !== "DATA_UNAVAILABLE" &&
+            flood?.overallRisk ? (
+              <RiskPill severity={flood.overallRisk} />
+            ) : (
+              <span className="muted-3">—</span>
+            )}
           </div>
         </div>
       </div>
@@ -97,7 +104,7 @@ export default function HazardsPage() {
           <div className="panel">
             <div className="panel-head">
               <span className="panel-title">District Ranking</span>
-              <span className="small muted">By expected rainfall</span>
+              <span className="small muted">By simulated rainfall</span>
             </div>
             <div className="panel-body">
               {rain?.districtRanking && rain.districtRanking.length > 0 ? (
@@ -107,7 +114,7 @@ export default function HazardsPage() {
                       <th>#</th>
                       <th>District</th>
                       <th>State</th>
-                      <th style={{ textAlign: "right" }}>Expected (mm)</th>
+                      <th style={{ textAlign: "right" }}>Simulated (mm)</th>
                       <th>Risk</th>
                     </tr>
                   </thead>
@@ -147,7 +154,7 @@ export default function HazardsPage() {
 
           <div className="panel">
             <div className="panel-head">
-              <span className="panel-title">Wind Field Forecast</span>
+              <span className="panel-title">Wind Field</span>
               {wind ? <StatusLabel status={wind.status.status} /> : null}
             </div>
             <div className="panel-body">
@@ -167,15 +174,15 @@ export default function HazardsPage() {
                         <td style={{ fontWeight: 600 }}>{z.name}</td>
                         <td style={{ textAlign: "right" }} className="mono">{z.maxKt ?? "—"}</td>
                         <td style={{ textAlign: "right" }} className="mono">{z.radiusKm ?? "—"}</td>
-                        <td><RiskPill severity={z.risk ?? "MODERATE"} /></td>
+                        <td><RiskPill severity={z.risk} /></td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               ) : (
                 <EmptyState
-                  big="WIND FORECAST UNAVAILABLE"
-                  message={wind?.message ?? "No wind forecast data is available."}
+                  big="WIND FIELD UNAVAILABLE"
+                  message={wind?.message ?? "No wind field data is available (case-study model, no runnable inference)."}
                 />
               )}
             </div>
@@ -226,9 +233,12 @@ export default function HazardsPage() {
             <div className="panel-head"><span className="panel-title">Validation Note</span></div>
             <div className="panel-body">
               <p className="small muted">
-                Flood model: <code>flood_xgboost_spatial_holdout.pkl</code> (XGBoost / sklearn Pipeline).
-                Case study: FANI 2019 (spatial holdout). Status: AVAILABLE. Model not yet integrated —
-                generalization evidence limited to single-event spatial holdout validation.
+                Flood module: <code>flood_xgboost_spatial_holdout.pkl</code> (raw XGBClassifier, 28 features).
+                Scientific task: <strong>static spatial flood-extent classification</strong> on the single
+                FANI 2019 event — <strong>not a flood forecast and not a validated susceptibility model</strong>.
+                Labels are per-cell constant (post-event EMSR357 extent); claimed spatial-holdout metrics are
+                HISTORICAL CLAIMs not reproducible from the repo. Runtime status: DATA_UNAVAILABLE — requires
+                rainfall grids + full geographic preprocessing that are not available in standard inputs.
               </p>
             </div>
           </div>

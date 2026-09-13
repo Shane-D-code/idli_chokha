@@ -62,6 +62,40 @@ class HazardRiskEngine:
             RiskLevel.EXTREME: (0.80, 1.0),
         })
 
+    # --- helpers for availability tests ---------------------------------------------------
+
+    @staticmethod
+    def _rainfall_has_grid(rainfall: RainfallPrediction) -> bool:
+        """Return True when at least one rainfall grid carries an actual probability array."""
+        for h in ('rainfall_3h', 'rainfall_6h', 'rainfall_12h', 'rainfall_24h'):
+            grid = getattr(rainfall, h, None)
+            if grid is not None and grid.heavy_rain_probability is not None:
+                return True
+        return False
+
+    @staticmethod
+    def _wind_is_usable(wind: WindFieldPrediction) -> bool:
+        """True only if a real wind field grid was produced (not an UNAVAILABLE placeholder)."""
+        return bool(wind.wind_fields) and wind.status != "UNAVAILABLE"
+
+    @staticmethod
+    def _flood_is_usable(flood: FloodPrediction) -> bool:
+        """True only if a non-empty probability grid was produced."""
+        return (
+            flood.status not in ("UNAVAILABLE", "DATA_UNAVAILABLE")
+            and flood.probability_grid.size > 0
+        )
+
+    @staticmethod
+    def _landslide_is_usable(landslide: LandslidePrediction) -> bool:
+        """True only if a non-empty probability grid was produced (not STATIC_SUSCEPTIBILITY)."""
+        return (
+            landslide.status not in ("UNAVAILABLE", "STATIC_SUSCEPTIBILITY")
+            and landslide.probability_grid.probability_grid.size > 0
+        )
+
+    # --- main compute ---------------------------------------------------------------
+
     def compute(self,
                 cyclone_state: CycloneState,
                 genesis: Optional[GenesisPrediction] = None,
@@ -73,42 +107,75 @@ class HazardRiskEngine:
                 rainfall: Optional[RainfallPrediction] = None,
                 flood: Optional[FloodPrediction] = None,
                 landslide: Optional[LandslidePrediction] = None) -> UnifiedForecastState:
-        """Compute unified hazard assessment."""
+        """Compute unified hazard assessment.
+
+        Only predictions that actually contain usable output are scored;
+        unavailable, static-susceptibility, or empty-grid placeholders are
+        explicitly listed as ``unassessed_hazards`` so the composite cannot
+        be mistaken for a complete assessment.
+        """
 
         components = []
+        assessed: list[str] = []
+        unassessed: list[str] = []
 
-        # Wind hazard
+        # --- Wind (scorable only when real grid data exists) -------------------------
         if wind:
-            wind_hazard = self._assess_wind_hazard(wind, track, intensity)
-            components.append(wind_hazard)
+            if self._wind_is_usable(wind):
+                components.append(self._assess_wind_hazard(wind, track, intensity))
+                assessed.append('wind')
+            else:
+                unassessed.append('wind')
 
-        # Rainfall hazard
+        # --- Rainfall (scorable only when at least one grid carries probabilities) ---
         if rainfall:
-            rain_hazard = self._assess_rainfall_hazard(rainfall)
-            components.append(rain_hazard)
+            if self._rainfall_has_grid(rainfall):
+                components.append(self._assess_rainfall_hazard(rainfall))
+                assessed.append('rainfall')
+            else:
+                unassessed.append('rainfall')
 
-        # Flood hazard
+        # --- Flood (scorable only for a genuine probabilistic flood prediction) -----
         if flood:
-            flood_hazard = self._assess_flood_hazard(flood)
-            components.append(flood_hazard)
+            if self._flood_is_usable(flood):
+                components.append(self._assess_flood_hazard(flood))
+                assessed.append('flood')
+            else:
+                unassessed.append('flood')
 
-        # Landslide hazard
+        # --- Landslide (scorable only for a dynamic probability grid) ---------------
         if landslide:
-            slide_hazard = self._assess_landslide_hazard(landslide)
-            components.append(slide_hazard)
+            if self._landslide_is_usable(landslide):
+                components.append(self._assess_landslide_hazard(landslide))
+                assessed.append('landslide')
+            else:
+                unassessed.append('landslide')
 
-        # RI hazard (rapid intensification increases all hazards)
+        # --- RI (probability can legitimately be 0.0 if a real model runs) ----------
         if ri:
             ri_hazard = self._assess_ri_hazard(ri, intensity)
-            components.append(ri_hazard)
+            if ri_hazard is not None:
+                components.append(ri_hazard)
+                assessed.append('ri')
+            else:
+                unassessed.append('ri')
 
-        # Intensity hazard
+        # --- Intensity (scorable only when the model produced a real prediction) ----
         if intensity:
-            intensity_hazard = self._assess_intensity_hazard(intensity)
-            components.append(intensity_hazard)
+            if intensity.status != "UNAVAILABLE":
+                components.append(self._assess_intensity_hazard(intensity))
+                assessed.append('intensity')
+            else:
+                unassessed.append('intensity')
 
-        # Combine hazards
-        overall_severity, overall_confidence = self._combine_hazards(components)
+        # Combine hazards. When no component produced a usable output, the
+        # overall severity is None (not assessed), NOT RiskLevel.NONE which
+        # the UI would misread as "assessed and low risk".
+        if not components:
+            overall_severity = None
+            overall_confidence = 0.0
+        else:
+            overall_severity, overall_confidence = self._combine_hazards(components)
 
         # Determine affected region
         affected_region = self._compute_affected_region(components, track, cyclone_state)
@@ -130,7 +197,9 @@ class HazardRiskEngine:
             confidence=overall_confidence,
             model_versions={},  # Filled by orchestrator
             uncertainty_summary=self._compute_uncertainty_summary(components),
-            explanations=self._generate_explanations(components, cyclone_state)
+            explanations=self._generate_explanations(components, cyclone_state),
+            assessed_hazards=assessed,
+            unassessed_hazards=unassessed,
         )
 
         return unified
@@ -240,9 +309,18 @@ class HazardRiskEngine:
         )
 
     def _assess_ri_hazard(self, ri: RIPrediction,
-                           intensity: Optional[IntensityPrediction]) -> HazardComponent:
-        """Assess RI hazard (amplifies other hazards)."""
-        prob = ri.calibrated_probability or ri.probability_24h
+                           intensity: Optional[IntensityPrediction]) -> Optional[HazardComponent]:
+        """Assess RI hazard (amplifies other hazards).
+
+        Returns ``None`` when no usable probability exists (RI explicitly
+        UNAVAILABLE), so the caller reports it as unassessed instead of silently
+        scoring a zero.
+        """
+        if ri.status == "UNAVAILABLE":
+            return None
+        prob = ri.calibrated_probability if ri.calibrated_probability is not None else ri.probability_24h
+        if prob is None or prob < 0.0:
+            return None
         risk_level = self._prob_to_risk(prob)
 
         return HazardComponent(
@@ -277,8 +355,10 @@ class HazardRiskEngine:
             affected_area_km2=0.0
         )
 
-    def _prob_to_risk(self, prob: float) -> RiskLevel:
+    def _prob_to_risk(self, prob: Optional[float]) -> RiskLevel:
         """Convert probability to risk level."""
+        if prob is None:
+            return RiskLevel.NONE
         for level, (low, high) in self.risk_thresholds.items():
             if low <= prob < high:
                 return level
@@ -346,11 +426,18 @@ class HazardRiskEngine:
 
     def _track_spread_km(self, lats: list[float], lons: list[float]) -> float:
         """Estimate track spread in km."""
-        from src.core.schema import _hav_km_np
         if len(lats) < 2:
             return 300
-        # Distance from first to last point
-        return _hav_km_np(lats[0], lons[0], lats[-1], lons[-1]) + 200
+        # Distance from first to last point (haversine)
+        r_earth_km = 6371.0
+        lat1, lon1, lat2, lon2 = map(
+            np.radians, (lats[0], lons[0], lats[-1], lons[-1]))
+        dlat = lat2 - lat1
+        dlon = lon2 - lon1
+        a = (np.sin(dlat / 2.0) ** 2
+             + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2.0) ** 2)
+        c = 2.0 * np.arctan2(np.sqrt(a), np.sqrt(1.0 - a))
+        return r_earth_km * c + 200
 
     def _estimate_wind_affected_area(self, wind: WindFieldPrediction) -> float:
         """Estimate area affected by damaging winds."""

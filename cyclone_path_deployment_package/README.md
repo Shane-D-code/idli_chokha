@@ -67,3 +67,14 @@ Request body:
 Send exactly 12 such observations at 2-hour intervals.
 
 The response contains 12 predictions at 2,4,...,24 hours.
+
+## Limitations (audit finding, 2026-09-12)
+
+- Valid out to +24 h only (12 steps, 2 h apart).
+- **The uncertainty output is NOT calibrated and does NOT grow with lead time:**
+  in the distilled checkpoint the uncertainty head is saturated at a constant
+  bound (~209.9 km) at every horizon (`log_std` clamp). Treat it as a fixed,
+  unvalidated spread, not a per-horizon confidence interval.
+- SST / shear are climatology proxies, not real-time satellite/reanalysis fields.
+- Historical track-error claims (~50–80 km at 24 h) are NOT reproduced from this
+  repository.

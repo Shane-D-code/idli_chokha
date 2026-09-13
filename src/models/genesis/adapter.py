@@ -6,10 +6,12 @@ pipeline:
     PRIMARY / PRODUCTION:
         LightGBM
 
-    CALIBRATED SOFT-VOTING ENSEMBLE:
+    SOFT-VOTING ENSEMBLE (UNCALIBRATED):
         LightGBM  = 0.40
         XGBoost   = 0.35
         RandomForest = 0.25
+    (No calibration artifact exists; the ensemble is a weighted average of raw
+    class-1 probabilities and is NOT claimed to be calibrated.)
 
 Strict model restriction: ONLY LightGBM, XGBoost, RandomForest participate.
 CatBoost, ExtraTrees, GradientBoosting, HistGradientBoosting, and any other
@@ -28,10 +30,9 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import warnings
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import joblib
 import numpy as np
@@ -314,7 +315,7 @@ class _GenesisComponent:
         )
         return True
 
-    def predict_proba(self, X: pd.DataFrame) -> Optional[float]:
+    def predict_proba(self, X: pd.DataFrame) -> float | None:
         """Return probability of genesis (class 1) for a single sample.
 
         Returns None if the component is unavailable or the prediction fails.
@@ -354,12 +355,12 @@ class GenesisModelAdapter(GenesisModel):
     (soft voting on probabilities; no hard-label averaging).
     """
 
-    def __init__(self, model_info: Optional[ModelInfo] = None,
+    def __init__(self, model_info: ModelInfo | None = None,
                  raw_model: Any = None,
-                 metadata: Optional[ModelMetadata] = None,
-                 artifacts: Optional[dict] = None,
+                 metadata: ModelMetadata | None = None,
+                 artifacts: dict | None = None,
                  threshold: float = DEFAULT_GENESIS_THRESHOLD,
-                 ensemble_weights: Optional[dict] = None,
+                 ensemble_weights: dict | None = None,
                  mode: str = "production"):
         if model_info is None:
             model_info = ModelInfo(
@@ -493,8 +494,14 @@ class GenesisModelAdapter(GenesisModel):
             "z200": None,
             "sst": g(env, "sst") if env.sst is not None else (g(ocean, "sst") if ocean else None),
             "sst_anomaly": g(env, "sst_anomaly") if env.sst_anomaly is not None else (g(ocean, "sst_anomaly") if ocean else None),
-            "tchp_kj_cm2_y": g(ocean, "tchp") if ocean else None,
-            "ohc700_kj_cm2_y": g(ocean, "ocean_heat_content") if ocean else None,
+            # The "_y" TCHP/OHC700 columns were a second (distinct) value during
+            # training (from a pandas merge that suffixed duplicated columns).
+            # That second value cannot be reconstructed from CycloneState, so it
+            # is left NaN -> median-imputed. We must NOT feed the "_x" value into
+            # the "_y" slot: that fabricates an equality the model never saw and
+            # measurably warps XGBoost/RandomForest probabilities.
+            "tchp_kj_cm2_y": None,
+            "ohc700_kj_cm2_y": None,
         }
 
         df = pd.DataFrame([raw], columns=GENESIS_FEATURES)
@@ -502,14 +509,14 @@ class GenesisModelAdapter(GenesisModel):
 
     # -- prediction ----------------------------------------------------------
 
-    def _component_probs(self, X: pd.DataFrame) -> dict[str, Optional[float]]:
+    def _component_probs(self, X: pd.DataFrame) -> dict[str, float | None]:
         """Compute per-component genesis probabilities (class 1)."""
         return {
             mt: comp.predict_proba(X)
             for mt, comp in self.components.items()
         }
 
-    def _ensemble_proba(self, probs: dict[str, Optional[float]]) -> Optional[float]:
+    def _ensemble_proba(self, probs: dict[str, float | None]) -> float | None:
         """Weighted soft-voting ensemble probability.
 
         ensemble = 0.40*lgbm + 0.35*xgb + 0.25*rf
@@ -537,7 +544,7 @@ class GenesisModelAdapter(GenesisModel):
         return RiskLevel.LOW
 
     def predict(self, cyclone_state: CycloneState,
-                mode: Optional[str] = None) -> GenesisPrediction:
+                mode: str | None = None) -> GenesisPrediction:
         """Generate a GenesisPrediction.
 
         Args:
@@ -601,7 +608,7 @@ class GenesisModelAdapter(GenesisModel):
             artifact_path = self.components["lightgbm"].artifact_path
         else:
             provenance = {
-                "ensemble": "calibrated soft-voting ensemble",
+                "ensemble": "soft-voting ensemble (uncalibrated)",
                 "weights": self.ensemble_weights,
                 "members": {
                     mt: {
@@ -673,9 +680,13 @@ class GenesisModelAdapter(GenesisModel):
             timestamp=datetime.utcnow(),
             explanation=(
                 "PROTOTYPE Genesis model. Dataset: 300 samples / 191 NIO "
-                "storms / 2015-2024. Report notes synthetic SST/SST-anomaly "
-                "and TCHP/OHC700 features; storm-aware CV was lower than "
-                "held-out test performance. Not operationally validated."
+                "storms / 2015-2024 per the external source report; the "
+                "training data, script, and CV/test metrics are NOT in this "
+                "repository (HISTORICAL CLAIM - not reproducible from current "
+                "repo). Report notes synthetic SST/SST-anomaly and TCHP/OHC700 "
+                "features; storm-aware CV was lower than held-out test "
+                "performance. Ensemble is uncalibrated. Not operationally "
+                "validated."
             ),
         )
 
@@ -720,8 +731,8 @@ def create_genesis_adapter(
     model_version: str = "1.0.0",
     mode: str = "production",
     threshold: float = DEFAULT_GENESIS_THRESHOLD,
-    artifacts: Optional[dict] = None,
-    ensemble_weights: Optional[dict] = None,
+    artifacts: dict | None = None,
+    ensemble_weights: dict | None = None,
 ) -> GenesisModelAdapter:
     """Factory to create and load a Genesis adapter.
 

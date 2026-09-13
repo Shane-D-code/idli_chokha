@@ -1,146 +1,111 @@
-# Cyclone Track Predictor
+# TOOFAN Cyclone Forecast Pipeline
 
-This lets you predict the future track of a **new** tropical cyclone using the
-pre-trained V12 (best) model. You feed in the cyclone's *observed history* and get
-back its predicted position for the next 24 hours (at 2 h steps).
+A research repository integrating tropical-cyclone models: genesis, track
+(trajectory), rapid intensification (RI), intensity, recurvature, and the
+static hazard/baseline modules (rainfall, wind, flood, landslide).
 
----
-
-## 1. What you need (files)
-
-Keep everything in one folder, in this layout:
-
-```
-cyclone_project/
-│
-├── v12_predict_new.py       ← the runner you call (NEW)
-├── model.py                 ← defines the neural network (CycloneTransformerV11)
-├── losses.py                ← distance math used by the runner
-├── dataset.py               ← data handling helpers
-├── v12_common.py            ← loads the model checkpoint
-├── prepare_dataset.py       ← builds the 27 input features from raw fixes
-└── checkpoints/
-    └── v12_best_model.pt    ← the trained best model (weights + config + stats)
-```
-
-**Python packages required:** `torch`, `numpy`, `pandas` (+ `requests`).
-
-The simplest option is to copy the entire `cyclone_project` folder (it already
-contains everything including an install of these packages).
+> **Status of this repository (2026-09-12):** Most branches are research-grade.
+> The pipeline runs, but **no model is production-ready**. See the
+> [Model Health Check](docs/model_audit/model_health_check.md) and
+> [Model Inventory](docs/model_inventory.md) for the full audit.
 
 ---
 
-## 2. Exact input
+## 1. What actually runs today
 
-Create a CSV with the cyclone's **observed fixes so far**. You must have **at least
-12 fixes** (13 recommended, so the model has enough history). Use **3-hourly** spacing
-if possible (matches what the model was trained on).
+| Module | Real inference | Status |
+|--------|----------------|--------|
+| Trajectory (track) | ✅ point forecasts (+2h…+24h) | **LIMITED / UNVERIFIED** — uncertainty head is a **saturated ~209.9 km constant bound** (not calibrated, does not grow with lead time) |
+| Genesis | ✅ P(genesis \| disturbance) | PROTOTYPE — synthetic features; uncalibrated ensemble; not production-validated; training data/code not in repo |
+| Recurvature | ✅ | LIMITED — threshold/confidence are fixed, not calibrated |
+| RI — IMD branch | ✅ | AVAILABLE — IMD-only; `calibrated_probability` is an **alias of `imd_probability`** (no applied calibration) |
+| RI — ERA5 branch | ❌ | UNAVAILABLE — runtime feature reconstruction not wired |
+| RI — Satellite CNN | ❌ | UNVERIFIED — real fitted artifact loads, but inference NOT runnable in-repo (fold-0 scaler absent; `[0,1]`↔Kelvin mismatch); OOF claims are HISTORICAL CLAIMs |
+| RI — Fusion | ❌ | NOT IMPLEMENTED — no fusion meta-model exists |
+| Intensity | ❌ | UNAVAILABLE — no trained artifact in repository; retrain recipe exists (`cyclone intensity/retrain.py`) |
+| Rainfall | ⚠️ | BASELINE ONLY — same-time classifier, **not** a forecast |
+| Wind | ❌ | UNAVAILABLE in current env — Yaas single case study; `.keras` artifact not loadable (TensorFlow import crashes the interpreter); no inference pipeline |
+| Flood | ⚠️ | BASELINE — single event (FANI), spatial holdout only |
+| Landslide | ⚠️ | STATIC VISUALIZATION — no ML model |
 
-```
-SID,ISO_TIME,lat,lon,wind,mslp,rmw
-MYCY,2026-08-01 00:00:00,-15.0,80.0,40,995,
-MYCY,2026-08-01 03:00:00,-15.6,80.3,45,992,
-MYCY,2026-08-01 06:00:00,-16.1,80.7,50,988,
-... (at least 12 rows; last row = the most recent fix) ...
-```
-
-### Columns
-
-| Column | Required | Description | Units |
-|---|---|---|---|
-| `SID` | yes | storm name/id (any string) | — |
-| `ISO_TIME` | yes | observation time | `YYYY-MM-DD HH:MM:SS` (or Unix seconds) |
-| `lat` | yes | latitude | degrees |
-| `lon` | yes | longitude | degrees |
-| `wind` | no | max sustained wind | kt |
-| `mslp` | no | min sea-level pressure | hPa |
-| `rmw` | no | radius of max winds | nmi |
-
-Notes:
-
-- `wind`/`mslp`/`rmw` are used to build the SST/shear/RMW proxy features; if you
-  omit them the script uses training-like defaults, but **provide them when you can**
-  for a more faithful forecast.
-- The model predicts positions for `+2, +4, +6, ..., +24` hours **after the last
-  row** in your CSV.
+Context: `REPAIR_LOG.md` documents the ongoing scientific-honesty audit.
 
 ---
 
-## 3. How to run
+## 2. Quick start (full pipeline)
 
 ```bash
-python v12_predict_new.py --ckpt checkpoints/v12_best_model.pt --new_csv new_cyclone.csv
+pip install -e .            # or: pip install -r requirements.txt
+python -m pytest            # runs the test suite (currently 167 passing)
 ```
 
-Optional flags:
+Run the CLI:
 
 ```bash
-# Save the forecast to a CSV file
-python v12_predict_new.py --ckpt checkpoints/v12_best_model.pt --new_csv new_cyclone.csv --out forecast.csv
-
-# Force CPU (default: GPU if available, else CPU)
-python v12_predict_new.py --ckpt checkpoints/v12_best_model.pt --new_csv new_cyclone.csv --device cpu
+python -m src.cli.main --help
 ```
 
----
-
-## 4. Exact output
-
-The script prints a table (and optionally writes it to `--out`). Example:
-
-```
-horizon       forecast_time    cal_lat    cal_lon    raw_lat    raw_lon  learned_scale  sigma_km
-Current 1980-01-03 21:00:00 -16.900000 175.500000 -16.900000 175.500000       1.000000       NaN
-    +2h 1980-01-03 23:00:00 -17.338024 175.639136 -17.265022 175.615947       1.199993  0.006738
-    +4h 1980-01-04 01:00:00 -17.798546 175.768336 -17.648789 175.723614       1.199998  0.006738
-    +6h 1980-01-04 03:00:00 -18.240245 175.917248 -18.016871 175.847707       1.199999  0.006738
-    ...
-    +24h 1980-01-04 21:00:00 -21.882498 177.718469 -21.052083 177.348725       1.199999 12.182494
-```
-
-### Columns explained
-
-| Column | Meaning |
-|---|---|
-| `horizon` | `Current` = the last observed fix; `+Nh` = forecast N hours after it |
-| `forecast_time` | the valid time of that forecast point |
-| `cal_lat`, `cal_lon` | **the final predicted position** (calibrated) — use these |
-| `raw_lat`, `raw_lon` | raw model output before the learned scale correction |
-| `learned_scale` | per-horizon magnitude calibration factor (bounded 0.80–1.20) |
-| `sigma_km` | forecast uncertainty, in km (larger = less certain; grows with lead time) |
+The pipeline uses the shared adapters in `src/models/adapters/` (Trajectory,
+RI, Intensity, Recurvature) plus `src/models/genesis/adapter.py`.
 
 ---
 
-## 5. What each file does
+## 3. Trajectory / track model
 
-| File | Purpose |
-|---|---|
-| `v12_predict_new.py` | **The runner you execute.** Reads your new cyclone CSV, builds the 27 features, runs the model, prints/saves the 12-horizon forecast. |
-| `model.py` | Defines `CycloneTransformerV11` — the neural network: a Transformer encoder that reads the last 12 fixes and predicts position at all 12 horizons at once. |
-| `losses.py` | Defines `haversine_km` (great-circle distance) and other math used to compute track distances. |
-| `dataset.py` | Data helpers (how raw rows become fixed-length input windows). |
-| `v12_common.py` | `load_v12()` — loads the checkpoint and reconstructs the exact model + config + normalization stats. |
-| `prepare_dataset.py` | Builds the **27 input features** (see below) from your raw lat/lon/wind/mslp/rmw fixes — exactly the same way the model was trained. |
-| `checkpoints/v12_best_model.pt` | The trained best model: weights, architecture config, and the training-set normalization statistics needed to run inference. |
+The deployed trajectory model is a distilled V12 ("LT3P") PyTorch checkpoint:
+`best_cyclone_model_lt3p_distilled.pth` (plus `scalers.pkl`) at the repository
+root, loaded through `cyclone_path_deployment_package/`.
+
+- Full CLI/API guide for running a single-storm 12-horizon forecast:
+  **see [`cyclone_path_deployment_package/README.md`](cyclone_path_deployment_package/README.md)**.
+- Adapter: `src/models/adapters/trajectory_adapter.py`
+  (`create_trajectory_adapter` / `predict_with_uncertainty`).
+
+### Honest limitations of the trajectory model
+
+- **Valid out to 24 h only** (+2h…+24h, 12 steps) — a short-range tracker.
+- **Uncertainty is NOT calibrated and does NOT grow with lead time.** At
+  inference the uncertainty output is a saturated constant bound (~209.9 km),
+  i.e. `sigma_km` should be treated as *a fixed, unvalidated spread*, not a
+  per-horizon calibrated confidence interval. *This contradicts older V12
+  documentation that claimed a per-horizon, lead-time-growing, calibrated
+  `sigma_km`.*
+- **SST / shear are climatology proxies**, not real-time satellite or
+  reanalysis fields.
+- Requires **≥ 12 observed fixes** (2-hourly spacing for the distilled
+  checkpoint); more history = better forecast.
+- Historically reported 24h track errors (~50–80 km) are a
+  **HISTORICAL CLAIM — NOT REPRODUCED FROM CURRENT REPOSITORY**.
 
 ---
 
-## 6. The 27 input features (built automatically — you don't make these)
+## 4. Other modules
 
-The script converts your raw fixes into the 27 numbers per timestep the model
-expects: position (`lat`, `lon`), intensity (`wind`, `mslp`, `rmw`), proxies
-(`sst`, `shear`), and derived motion (translation `speed_kmh`, bearing sin/cos,
-month sin/cos, `dt_hours`, and the u/v velocity + speed/u/v over 3/6/12 h windows,
-acceleration, and turn sin/cos).
-
-**You do not compute these** — the script does it for you, identically to training.
+- **Intensity** — training code + deterministic retraining entry point exist
+  (`cyclone intensity/retrain.py`), but the artifact and dataset are absent:
+  **UNAVAILABLE / UNVERIFIED**. See `cyclone intensity/README.md`.
+- **RI** — IMD XGBoost branch works (`cyclone_backup/models/imd_final_xgboost.json`).
+  ERA5 branch features are not wired; the satellite CNN artifact exists but is NOT
+  runnable in-repo (fold-0 scaler missing; storage↔preprocess unit mismatch) and
+  its OOF skill figures are historical claims, not reproduced here; the fusion
+  meta-model does not exist. `calibrated_probability` is **not** the product of
+  any calibration step.
+- **Genesis** — `src/models/genesis/adapter.py`, LightGBM production +
+  soft-voting ensemble (**uncalibrated**); features are synthetic per the
+  external source report; `calibrated=False`; training data, script, and
+  metrics are not in this repository.
+- **Recurvature** — `recurvature/`, XGBoost on IBTrACS, storm-wise split,
+  ROC-AUC ≈ 0.722 (historical claim).
+- **Rainfall / Wind / Flood / Landslide** — baselines or static maps in
+  `rain/`, `wind/`, `flood/`, `stage17_hazard_maps/`. They are **not** future-
+  forecasting models.
 
 ---
 
-## 7. Important limits
+## 5. Documentation map
 
-- **Valid out to 24 h only.** It is a short-range tracker, not a medium-range model.
-- **SST/shear are proxies** (from climatology), not real-time satellite data, so real
-  reanalysis steering fields are not captured.
-- **Needs ≥ 12 observed fixes** to predict; more history = better forecast.
-- It predicts **track only** (position), not intensity.
+- `docs/model_inventory.md` — catalog of models, datasets, artifacts, statuses
+- `docs/model_audit/model_health_check.md` (+`.json`) — 9-model health table
+- `REPAIR_LOG.md` — phase-by-phase repair/scientific-honesty log
+- `cyclone intensity/README.md`, `cyclone_path_deployment_package/README.md` —
+  per-module guides

@@ -24,8 +24,14 @@ export default function ModelsPage() {
   if (loading) return <div className="page"><LoadingState rows={4} /></div>;
 
   const operational = models.filter((m) => m.status === "AVAILABLE" || m.status === "LIVE").length;
-  const missing = models.filter((m) => m.status === "MODEL_MISSING").length;
+  const limited = models.filter((m) => m.status === "LIMITED").length;
+  const baseline = models.filter((m) => m.status === "BASELINE" || m.status === "AVAILABLE_BASELINE").length;
+  const staticSusceptibility = models.filter((m) => m.status === "STATIC_SUSCEPTIBILITY").length;
+  const unavailable = models.filter((m) =>
+    m.status === "UNAVAILABLE" || m.status === "DATA_UNAVAILABLE" || m.status === "NOT_IMPLEMENTED"
+  ).length;
   const blocked = models.filter((m) => m.status === "RUNTIME_REQUIRED" || m.status === "DEGRADED").length;
+  const missing = models.filter((m) => m.status === "MODEL_MISSING").length;
   const integrated = models.filter((m) => m.status === "NOT_INTEGRATED").length;
 
   return (
@@ -40,7 +46,11 @@ export default function ModelsPage() {
       <div className="hazard-strip" style={{ marginBottom: "var(--section-gap)" }}>
         <MetricStrip label="Total Models" value={models.length} />
         <MetricStrip label="Operational" value={operational} tone="ok" />
-        <MetricStrip label="Blocked" value={blocked} tone="warn" />
+        <MetricStrip label="Limited" value={limited} tone="warn" />
+        <MetricStrip label="Baseline" value={baseline} tone="warn" />
+        <MetricStrip label="Static" value={staticSusceptibility} tone="warn" />
+        <MetricStrip label="Unavailable" value={unavailable} tone="bad" />
+        <MetricStrip label="Blocked" value={blocked} tone="bad" />
         <MetricStrip label="Not Integrated" value={integrated} tone="warn" />
         <MetricStrip label="Missing" value={missing} tone="bad" />
       </div>

@@ -25,7 +25,7 @@ export function CycloneLegend({ simplified = false }: CycloneLegendProps) {
       {!simplified && (
         <div className="cv-legend-row">
           <span className="cv-legend-swatch uncertainty" aria-hidden="true" />
-          <span>Uncertainty</span>
+          <span>Uncertainty band (uncalibrated bound)</span>
         </div>
       )}
       <div className="cv-legend-row">

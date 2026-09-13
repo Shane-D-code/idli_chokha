@@ -4,7 +4,7 @@ Covers the approved Genesis integration:
     - LightGBM (PRIMARY / production)
     - XGBoost
     - RandomForest
-    - Calibrated soft-voting ensemble (0.40 / 0.35 / 0.25)
+    - Soft-voting ensemble (0.40 / 0.35 / 0.25, UNCALIBRATED)
 
 These tests verify loading, prediction, the exact weighted ensemble formula,
 the 0.24 threshold, model-substitution safeguards, provenance, SHA-256
@@ -13,24 +13,25 @@ registration, and Phase 1 orchestrator integration.
 """
 
 import os
-import pytest
 from datetime import datetime, timezone
 
 import numpy as np
+import pytest
 
 from src.core.schema import (
-    CycloneState, Basin, GenesisPrediction, RiskLevel, probability_to_risk_level,
+    Basin,
+    CycloneState,
+    GenesisPrediction,
+    RiskLevel,
 )
 from src.models.base import ModelFactory, ModelInfo
 from src.models.genesis.adapter import (
+    DEFAULT_GENESIS_THRESHOLD,
+    GENESIS_FEATURES,
+    GENESIS_N_FEATURES,
     GenesisModelAdapter,
     _GenesisComponent,
     create_genesis_adapter,
-    DEFAULT_ENSEMBLE_WEIGHTS,
-    DEFAULT_GENESIS_THRESHOLD,
-    APPROVED_MODEL_TYPES,
-    GENESIS_FEATURES,
-    GENESIS_N_FEATURES,
 )
 
 ARTIFACTS = {
@@ -426,6 +427,33 @@ class TestInvalidFeatures:
         X = adapter._build_feature_frame(bare)
         assert X.isna().all().any()  # at least some missing inputs present as NaN
 
+    def test_y_tchp_ohc_never_duplicated_from_x(self, adapter):
+        """The '_y' TCHP/OHC700 slots must NOT be auto-filled from '_x'.
+
+        During training the '_x'/'_y' columns were distinct values (merge
+        suffixes). Feeding the '_x' value into the '_y' slot fabricates an
+        equality the model never saw. The '_y' value cannot be reconstructed
+        from CycloneState, so it must be left NaN (median-imputed).
+        """
+        state = CycloneState(
+            storm_id="x", basin=Basin.BAY_OF_BENGAL,
+            timestamp=datetime.now(timezone.utc), latitude=15.0, longitude=85.0,
+        )
+        state.ocean_features.tchp = 90.0
+        state.ocean_features.ocean_heat_content = 75.0
+        X = adapter._build_feature_frame(state)
+        assert X["tchp_kj_cm2_y"].isna().all()
+        assert X["ohc700_kj_cm2_y"].isna().all()
+        assert not X["tchp_kj_cm2_x"].isna().any()
+        assert not X["ohc700_kj_cm2_x"].isna().any()
+
+    def test_ensemble_provenance_is_uncalibrated(self, adapter, cyclone_state):
+        """No calibration artifact exists -> never label the ensemble 'calibrated'."""
+        pred = adapter.predict_ensemble(cyclone_state)
+        assert pred.provenance["ensemble"] == "soft-voting ensemble (uncalibrated)"
+        assert pred.calibrated is False
+        assert pred.calibrated_probability is None
+
 
 # ============================================================================
 # O: MODEL FACTORY REGISTRATION
@@ -527,7 +555,6 @@ class TestFidelity:
     @pytest.mark.parametrize("model_type", ["lightgbm", "xgboost", "randomforest"])
     def test_fidelity(self, adapter, model_type):
         import joblib
-        import pandas as pd
 
         comp = adapter.components[model_type]
         X = _feature_frame_from_import()

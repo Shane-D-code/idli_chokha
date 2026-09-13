@@ -189,8 +189,8 @@ export default function LiveMonitorPage() {
           { n: "Satellite", s: "AVAILABLE" as const },
           { n: "Track", s: "AVAILABLE" as const },
           { n: "Rainfall", s: "BASELINE" as const },
-          { n: "Wind", s: "AVAILABLE" as const },
-          { n: "Flood", s: "AVAILABLE" as const },
+          { n: "Wind", s: "UNAVAILABLE" as const },
+          { n: "Flood", s: "DATA_UNAVAILABLE" as const },
         ].map((s) => (
           <div key={s.n} className="hazard-module">
             <div className="m-title" style={{ fontSize: "0.95rem" }}>{s.n}</div>

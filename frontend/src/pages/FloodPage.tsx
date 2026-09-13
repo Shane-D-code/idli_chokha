@@ -36,10 +36,17 @@ export default function FloodPage() {
 
   if (loading) return <div className="page"><LoadingState rows={3} /></div>;
 
+  // A flood module reporting DATA_UNAVAILABLE has no assessed overall risk —
+  // the pill must not be rendered as a live classification.
+  const floodUsable =
+    data?.status.status !== "UNAVAILABLE" &&
+    data?.status.status !== "DATA_UNAVAILABLE" &&
+    data?.status.status !== "RUNTIME_REQUIRED";
+
   return (
     <div className="page">
       <div className="page-head">
-        <div className="page-kicker">Forecast · Hazard</div>
+        <div className="page-kicker">Hazard</div>
         <h1 className="page-title">Flood</h1>
         <p className="page-sub">Spatial flood hazard analysis — affected districts and inundation risk.</p>
         <div className="row" style={{ marginTop: "var(--sp-3)" }}>
@@ -87,10 +94,12 @@ export default function FloodPage() {
           <div className="panel heavy">
             <div className="panel-head"><span className="panel-title">Overall Flood Risk</span></div>
             <div className="panel-body">
-              {data?.overallRisk ? (
+              {floodUsable && data?.overallRisk ? (
                 <RiskPill severity={data.overallRisk} />
               ) : (
-                <p className="small muted">—</p>
+                <p className="small muted">
+                  {data ? "No overall risk — flood module is not producing a live assessment." : "—"}
+                </p>
               )}
             </div>
           </div>

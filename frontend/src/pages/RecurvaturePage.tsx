@@ -396,7 +396,7 @@ function AssessmentAvailable({ probability, risk, report }: { probability: numbe
       ) : null}
       <div className="row" style={{ justifyContent: "space-between", marginTop: "var(--sp-2)" }}>
         <span className="lbl">Model Status</span>
-        <StatusBadge status={report?.status.status ?? "AVAILABLE"} />
+        <StatusBadge status={report?.status.status ?? "UNAVAILABLE"} />
       </div>
     </div>
   );

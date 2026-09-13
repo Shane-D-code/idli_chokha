@@ -14,7 +14,7 @@ const LAYERS: LayerGroup[] = [
   { group: "Track", options: [
     { key: "observed", label: "Observed Path", available: true },
     { key: "forecast", label: "Model Forecast", available: true },
-    { key: "uncertainty", label: "Uncertainty Cone", available: true },
+    { key: "uncertainty", label: "Uncertainty Band (uncalibrated)", available: true },
     { key: "points", label: "Horizon Points", available: true },
   ]},
 ];
@@ -157,6 +157,11 @@ export default function TrackPage() {
               <DataRow label="Version" value={track?.modelVersion ?? "—"} />
               <DataRow label="Initialized" value={formatIST(track?.initialized)} />
               <DataRow label="Status" value={<StatusLabel status={categorized} />} />
+              {track?.status.message ? (
+                <p className="small muted" style={{ marginTop: "var(--sp-1)" }}>
+                  {track.status.message}
+                </p>
+              ) : null}
             </div>
           </div>
         </aside>

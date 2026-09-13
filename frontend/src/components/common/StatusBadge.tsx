@@ -6,12 +6,17 @@ export function statusTone(status: ModelOperationalStatus): string {
     case "LIVE":
       return "badge-ok";
     case "BASELINE":
+    case "AVAILABLE_BASELINE":
+    case "LIMITED":
     case "DEGRADED":
     case "DATA_REQUIRED":
+    case "STATIC_SUSCEPTIBILITY":
       return "badge-warn";
     case "MODEL_MISSING":
     case "NOT_INTEGRATED":
     case "RUNTIME_REQUIRED":
+    case "DATA_UNAVAILABLE":
+    case "NOT_IMPLEMENTED":
     case "UNAVAILABLE":
       return "badge-bad";
     default:

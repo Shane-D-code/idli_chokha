@@ -57,8 +57,11 @@ class RecurvatureModelAdapter(RecurvatureModel):
         if not path.exists():
             raise FileNotFoundError(f"Recurvature model artifact not found: {checkpoint_path}")
 
-        # Load XGBoost model using XGBClassifier (trained as classifier, needs predict_proba)
-        self._model = xgb.XGBClassifier()
+        # Load XGBoost model via Booster.
+        # XGBClassifier.load_model()/predict_proba() are broken under xgboost
+        # 2.1.3 + sklearn 1.8 ('_estimator_type' removed from ClassifierMixin).
+        # Booster.predict() applies the same binary:logistic objective.
+        self._model = xgb.Booster()
         self._model.load_model(str(path))
 
         # Load scaler (if saved separately) - for now recreate from training
@@ -188,17 +191,29 @@ class RecurvatureModelAdapter(RecurvatureModel):
         # Build features
         X = self._build_features(cyclone_state, track_prediction)
 
+        # Record which input features are REAL observations/derivations vs
+        # placeholders, so limitations are explicit and never hidden.
+        self._feature_sources = {
+            "lat": "real", "lon": "real", "wind": "real", "pres": "real",
+            "STORM_SPEED": "real", "dir_sin": "real", "dir_cos": "real",
+            "month_sin": "real", "month_cos": "real",
+            "DIST2LAND": "coarse_estimate",
+            "dir_change_3h": ("forecast_estimate"
+                              if track_prediction is not None and len(track_prediction.latitudes) >= 2
+                              else "placeholder_zero"),
+            "dir_change_9h": "placeholder_zero",
+        }
+        confidence = self._confidence_from_sources()
+
         # Scale features
         X_scaled = self._scaler.transform(X)
 
-        # Predict probability
-        prob = float(self._model.predict_proba(X_scaled)[0, 1])
+        # Predict probability (Booster.predict returns P(RI=1) for binary:logistic)
+        dmatrix = xgb.DMatrix(X_scaled, feature_names=self._feature_cols)
+        prob = float(self._model.predict(dmatrix)[0])
 
         # Risk level
         risk_level = self._prob_to_risk_level(prob)
-
-        # Confidence based on feature completeness
-        confidence = 0.7  # Would be higher with real DIST2LAND and historical heading
 
         # Expected turning window (based on training: within 24h)
         expected_window = "+0h to +24h" if prob > 0.5 else None
@@ -212,6 +227,27 @@ class RecurvatureModelAdapter(RecurvatureModel):
             timestamp=datetime.utcnow(),
             feature_importance=self._get_feature_importance(),
         )
+
+    def _confidence_from_sources(self) -> float:
+        """Confidence penalised for placeholder-derived input features.
+
+        The XGBoost model was trained on REAL IBTrACS values (DIST2LAND and
+        real 3-hourly historical heading change). A CycloneState carries no
+        track history, so unless a trajectory forecast is supplied (which only
+        approximates dir_change_3h), those features are filled with
+        placeholders. The returned confidence reflects that the observation
+        inputs are incomplete; the output must not be treated as if the real
+        features were observed.
+        """
+        penalties = {
+            "placeholder_zero": 0.35,
+            "coarse_estimate": 0.35,
+            "forecast_estimate": 0.15,
+        }
+        conf = 0.95
+        for source in self._feature_sources.values():
+            conf -= penalties.get(source, 0.0)
+        return max(0.25, min(1.0, conf))
 
     def _prob_to_risk_level(self, prob: float) -> RiskLevel:
         """Convert probability to risk level."""
@@ -227,19 +263,33 @@ class RecurvatureModelAdapter(RecurvatureModel):
             return RiskLevel.EXTREME
 
     def _get_feature_importance(self) -> dict[str, float]:
-        """Extract feature importances from the fitted model."""
-        if self._model is None or not hasattr(self._model, 'feature_importances_'):
+        """Extract feature importances from the loaded model.
+
+        Uses the Booster's weight-based get_score(), which matches the
+        default importance_type used previously by feature_importances_.
+        """
+        if self._model is None:
             return {}
 
-        importances = self._model.feature_importances_
-        return dict(zip(self._feature_cols, importances.tolist()))
+        score = self._model.get_score()
+        return {k: float(v) for k, v in score.items()}
 
     def explain(self, input_data: CycloneState, prediction: RecurvaturePrediction) -> dict:
         """Generate explanation for recurvature prediction."""
+        limitations = [
+            "DIST2LAND is a coarse 200/300/500 km estimate, NOT the real IBTrACS "
+            "DIST2LAND value the model was trained on.",
+            "dir_change_3h / dir_change_9h are not observable from a single "
+            "CycloneState; without track history they default to 0 (the model was "
+            "trained on real 3-hourly historical heading change). Under these "
+            "conditions the prediction is treated as LIMITED.",
+        ]
         return {
             "method": "feature_importance",
             "model_type": "XGBoost",
             "top_features": self._get_feature_importance(),
+            "feature_sources": getattr(self, "_feature_sources", {}),
+            "limitations": limitations,
             "note": "SHAP values can be computed for detailed explanations",
         }
 

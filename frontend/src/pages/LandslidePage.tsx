@@ -41,7 +41,7 @@ export default function LandslidePage() {
   return (
     <div className="page">
       <div className="page-head">
-        <div className="page-kicker">Forecast · Hazard</div>
+        <div className="page-kicker">Hazard</div>
         <h1 className="page-title">Landslide</h1>
         <p className="page-sub">Cyclone-triggered landslide hazard — terrain and static susceptibility.</p>
         <div className="row" style={{ marginTop: "var(--sp-3)" }}>
@@ -146,7 +146,7 @@ export default function LandslidePage() {
               <HazardModule
                 label="Landslide Model"
                 status={data?.modelStatus.status ?? "UNAVAILABLE"}
-                detail="Dynamic susceptibility computed along the cyclone track corridor"
+                detail="Static susceptibility (regional topography) — no dynamic ML model"
               />
             </div>
           </div>

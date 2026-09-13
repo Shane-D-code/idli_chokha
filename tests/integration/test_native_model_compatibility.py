@@ -63,7 +63,7 @@ class TestNativeModelCompatibility:
 
     def test_trajectory_and_recurvature_coexist(self, cyclone_state):
         """Trajectory (PyTorch) + Recurvature (XGBoost) must load and predict."""
-        traj = create_trajectory_adapter('cyclone_path/checkpoints/v12_best_model.pt')
+        traj = create_trajectory_adapter('best_cyclone_model_lt3p_distilled.pth')
         rec = create_recurvature_adapter('recurvature/xgb_recurve_model.json')
 
         traj_result = traj.predict(cyclone_state)
@@ -72,13 +72,13 @@ class TestNativeModelCompatibility:
         assert traj_result is not None
         assert rec_result is not None
         assert 0.0 <= rec_result.probability <= 1.0
-        assert traj_result.model_version == "v12"
+        assert traj_result.model_version == "lt3p"
         assert rec_result.model_version == "v1"
 
     def test_recurvature_and_trajectory_load_order(self, cyclone_state):
         """Recurvature (XGBoost) first, then Trajectory (PyTorch) must work."""
         rec = create_recurvature_adapter('recurvature/xgb_recurve_model.json')
-        traj = create_trajectory_adapter('cyclone_path/checkpoints/v12_best_model.pt')
+        traj = create_trajectory_adapter('best_cyclone_model_lt3p_distilled.pth')
 
         rec_result = rec.predict(cyclone_state)
         traj_result = traj.predict(cyclone_state)
@@ -89,7 +89,7 @@ class TestNativeModelCompatibility:
 
     def test_trajectory_and_ri_coexist(self, cyclone_state_with_history):
         """Trajectory (PyTorch) + RI (XGBoost+PyTorch) must load and predict."""
-        traj = create_trajectory_adapter('cyclone_path/checkpoints/v12_best_model.pt')
+        traj = create_trajectory_adapter('best_cyclone_model_lt3p_distilled.pth')
         ri = create_ri_adapter('cyclone_backup/models')
 
         traj_result = traj.predict(cyclone_state_with_history)
@@ -101,7 +101,7 @@ class TestNativeModelCompatibility:
 
     def test_all_three_models_coexist(self, cyclone_state_with_history):
         """Trajectory + Recurvature + RI all loaded simultaneously."""
-        traj = create_trajectory_adapter('cyclone_path/checkpoints/v12_best_model.pt')
+        traj = create_trajectory_adapter('best_cyclone_model_lt3p_distilled.pth')
         rec = create_recurvature_adapter('recurvature/xgb_recurve_model.json')
         ri = create_ri_adapter('cyclone_backup/models')
 
@@ -129,7 +129,7 @@ class TestNativeModelCompatibility:
 
     def test_multiple_predictions_stable(self, cyclone_state):
         """Repeated predictions should remain stable (no memory corruption)."""
-        traj = create_trajectory_adapter('cyclone_path/checkpoints/v12_best_model.pt')
+        traj = create_trajectory_adapter('best_cyclone_model_lt3p_distilled.pth')
         rec = create_recurvature_adapter('recurvature/xgb_recurve_model.json')
 
         for _ in range(5):

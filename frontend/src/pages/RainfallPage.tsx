@@ -39,9 +39,9 @@ export default function RainfallPage() {
   return (
     <div className="page">
       <div className="page-head">
-        <div className="page-kicker">Forecast · Hazard</div>
+        <div className="page-kicker">Hazard</div>
         <h1 className="page-title">Rainfall</h1>
-        <p className="page-sub">Cyclone precipitation — expected accumulation by region.</p>
+        <p className="page-sub">Cyclone precipitation — simulated accumulation for demo (same-time baseline classifier).</p>
         <div className="row" style={{ marginTop: "var(--sp-3)" }}>
           {data?.status ? <StatusLabel status={data.status.status} /> : null}
           <DemoBanner />

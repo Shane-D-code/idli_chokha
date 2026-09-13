@@ -1,0 +1,84 @@
+{
+  "purpose": "RI Improvement 2 \u2014 rebuild of the 89-feature ERA5 RI dataset",
+  "status": "rebuilt; raw CDS extraction where NetCDF present, historical carry otherwise (no fabrication)",
+  "generated_at": "2026-09-12T17:31:26.168520+00:00",
+  "python": "3.13.2",
+  "seed_note": "no RNG used in dataset build (deterministic transform only)",
+  "code_version": "ri-improvement-2 era5_rebuild.py",
+  "options": {
+    "best_track": "RI_ERA5_features_MVP.csv",
+    "era5_directory": "ERA5_expanded",
+    "satellite_meta": "metadata_clean.csv",
+    "start_date": null,
+    "end_date": null,
+    "storm_filter": null,
+    "lags_h": [
+      6,
+      12,
+      24
+    ]
+  },
+  "contract": {
+    "n_features": 89,
+    "matches_frozen_model": true,
+    "spec_file": "era5_ri_feature_spec_89.json"
+  },
+  "sources": {
+    "n_netcdf_files_present": 20,
+    "netcdf_dates": [
+      "2000-10-25",
+      "2000-11-27",
+      "2000-12-24",
+      "2001-10-14",
+      "2003-07-25",
+      "2003-08-27",
+      "2004-05-18",
+      "2005-07-29",
+      "2005-09-12",
+      "2005-11-28",
+      "2020-05-17",
+      "2020-05-18",
+      "2022-08-19",
+      "2023-01-30",
+      "2023-05-11",
+      "2023-08-01",
+      "2023-10-23",
+      "2024-09-08",
+      "2024-09-13",
+      "2025-11-25"
+    ],
+    "netcdf_variables": "d,r,t,u,v @ 850/700/500/200 hPa",
+    "grid_resolution_deg": 0.25,
+    "spatial_interpolation": "bilinear_storm_center",
+    "time_alignment": "exact valid_time match; era5_delta_minutes must be 0"
+  },
+  "provenance": {
+    "extracted_from_raw": {
+      "rows": 22,
+      "storms": 19,
+      "ri_pos": 6,
+      "ri_neg": 16
+    },
+    "carried_historical": {
+      "rows": 848,
+      "storms": 107,
+      "ri_pos": 76,
+      "ri_neg": 772
+    }
+  },
+  "blocked": {
+    "cds_api_credentials": "absent \u2014 raw 1982-2000 CDS downloads NOT possible (rows carried from canonical extraction, not fabricated)",
+    "rows_without_raw_and_not_in_canonical": []
+  },
+  "stats": {
+    "build_seconds": 0.78,
+    "rows": 870,
+    "storms": 126,
+    "ri_pos": 82,
+    "ri_neg": 788,
+    "date_range": [
+      "1982-05-01 03:00:00",
+      "2025-11-25 03:00:00"
+    ]
+  }
+}

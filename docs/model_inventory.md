@@ -10,16 +10,16 @@ This document catalogs all existing models, datasets, training scripts, and arti
 
 | Field | Details |
 |-------|---------|
-| **Module** | `cyclone_path/` |
+| **Module** | `cyclone_path_deployment_package/` (inference); legacy `cyclone_path/` (V12 CLI, referenced by `v12_common.py`) |
 | **Model** | `CycloneTransformerV11` (V12 checkpoint) — Transformer encoder + direct per-horizon heads with identifiable bounded scale correction (0.80–1.20) |
 | **Inputs** | 13 features × 12 timesteps: `lat`, `lon`, `wind`, `mslp`, `rmw`, `sst`, `shear`, `speed_kmh`, `dt_hours`, `bearing_sin`, `bearing_cos`, `month_sin`, `month_cos` (built from raw best-track fixes) |
-| **Outputs** | Forecast positions at +2, +4, +6, ..., +24h (12 horizons); each with `cal_lat`, `cal_lon`, `raw_lat`, `raw_lon`, `learned_scale`, `sigma_km` (uncertainty) |
-| **Dataset** | IBTrACS North Indian Ocean (`ibtracs.NI.list.v04r01.csv` ~28 MB); training uses storm-wise splits (train/val/test by storm ID) |
-| **Training Script** | Implicit in checkpoint creation (V12 training was done externally; `v12_common.py` loads it) |
-| **Inference Script** | `v12_predict_new.py` — takes a CSV of observed fixes (≥12 rows, 3-hourly) and produces 24h forecast |
-| **Model Artifact** | `cyclone_path/checkpoints/v12_best_model.pt` (2 MB) — contains weights, config, feature columns, normalization stats, train/val/test storm IDs |
-| **Status** | **PRODUCTION-READY** — well-tested, includes uncertainty (`sigma_km`), calibrated outputs, geographic boundary checks, max-movement constraint |
-| **Metrics** | Track error (Haversine km) per horizon; median 24h error ~50–80 km on test storms; uncertainty grows with lead time |
+| **Outputs** | Forecast positions at +2, +4, +6, ..., +24h (12 horizons); each with `cal_lat`, `cal_lon`, `raw_lat`, `raw_lon`, `learned_scale`, `sigma_km` (pending Phase 5 corrections applied to adapter: see `docs/model_audit/model_health_check.md`) |
+| **Dataset** | IBTrACS North Indian Ocean (`ibtracs.NI.list.v04r01.csv` ~28 MB in `wind/`); training used storm-wise splits (train/val/test by storm ID) |
+| **Training Script** | V12 training was done externally; the deployed artifact `best_cyclone_model_lt3p_distilled.pth` is a distilled LT3P checkpoint, loaded by `cyclone_path_deployment_package/` (`v12_common.load_v12` equivalent in the deployment package) |
+| **Inference Script** | `cyclone_path_deployment_package/` (api.py/inference.py/feature_builder.py) and `src/models/adapters/trajectory_adapter.py`; legacy `v12_predict_new.py` equivalent is packaged in the deployment package |
+| **Model Artifact** | `best_cyclone_model_lt3p_distilled.pth` (repo root, ~2 MB) + `scalers.pkl` (repo root) — the deployed checkpoint actually used by `trajectory_adapter.py`; the legacy `cyclone_path/checkpoints/v12_best_model.pt` path no longer exists in this repository |
+| **Status** | **LIMITED / UNVERIFIED** — real inference works (point forecasts loaded + executed via the deployment package), but (1) the uncertainty head is **saturated at ~209.9 km** (log-variance +5 clamp) — *not* a linear/scale-per-horizon spread, *not* calibrated, *not* growing with lead time; (2) point-forecast skill is not re-verified in-repo (see model_health_check); (3) the 12-point synthetic input-history path is unresolved (Phase 5) |
+| **Metrics** | **HISTORICAL CLAIM — NOT REPRODUCED FROM CURRENT REPOSITORY**: median 24h error ~50–80 km on historical test storms. **Uncertainty (sigma_km) is NOT verified and does NOT grow with lead time** (saturation bounded) |
 | **Dependencies** | PyTorch, NumPy, Pandas; no external reanalysis at inference (SST/shear are climatology proxies) |
 
 ---
@@ -29,17 +29,17 @@ This document catalogs all existing models, datasets, training scripts, and arti
 | Field | Details |
 |-------|---------|
 | **Module** | `cyclone_backup/` |
-| **Model** | **Multimodal late-fusion**: three independent branches → Logistic Regression meta-classifier |
+| **Model** | **Designed** multimodal late-fusion: three independent branches → Logistic Regression meta-classifier. **NOT realized in the repository** — no fusion meta-model artifact exists and no branch combination runs |
 | **Branch 1 — IMD** | XGBoost on 11 IMD features: `latitude`, `longitude`, `max_wind_kt`, `central_pressure_hpa`, `pressure_drop_hpa`, `wind_minus_6h_kt`, `delta_v_minus_6h_kt`, `wind_minus_12h_kt`, `delta_v_minus_12h_kt`, `wind_minus_24h_kt`, `delta_v_minus_24h_kt` |
 | **Branch 2 — ERA5** | XGBoost on ~50 ERA5 derived features: `d_*`, `r_*`, `t_*`, `u_*`, `v_*` at 850/700/500/200 hPa + derived (rh_mean_850_500, wind_mag_*, divergence_contrast_*, u/v_shear_850_200, shear_direction_deg, humidity/temp structure deltas) + temporal deltas (6h/12h/24h) |
 | **Branch 3 — Satellite (CNN)** | PyTorch `RICNNFusion` hybrid: 4-block CNN encoder (128×128 IR + valid mask) + 11-IMD-feature tabular head → fused embedding → classification head; focal loss (α=0.75, γ=2); trained in Google Colab |
-| **Inputs** | IMD best-track (intensity history), ERA5 reanalysis (storm-centred profiles), Satellite IR (INSAT/TCIR, storm-centred 128×128 crops) |
-| **Outputs** | `RIPrediction`: `probability_24h`, `risk_level`, `imd_probability`, `era5_probability`, `satellite_probability`, `fusion_probability`, `calibrated_probability`, `explanation`, `confidence` |
-| **Dataset** | Canonical `ri_multimodal_dataset.csv` (3,211 obs / 259 storms / 179 RI); ERA5: 848 obs / 107 storms; Satellite: 26 recovered images / 23 storms / 9 usable RI / 17 non-RI; TCIR global: 2,840 obs / 64 storms / 189 RI |
-| **Training Scripts** | `run_pipeline.py` (tabular), `tc_ri_cnn/train.py` (CNN in Colab), `run_final_multimodal.py` (fusion) |
-| **Inference Script** | `models/predict_ri.py` — loads all three branches + fusion meta-model |
-| **Model Artifacts** | `models/imd_final_xgboost.json`, `models/era5_final_xgboost.json`, `models/imd_era5_final_xgboost.json`, `models/satellite_cnn.pt` (1.3 MB), `models/predict_ri.py` |
-| **Status** | **MVP / PROTOTYPE** — honest negative results documented: IMD alone (PR-AUC 0.594) beats IMD+ERA5 (0.341) on strict common test set (20 storms / 25 RI); Satellite CNN OOF PR-AUC 0.516 on 9 obs; TCIR CNN PR-AUC 0.092; three-way fusion **NOT EVALUABLE** (zero ERA5+TCIR temporal overlap) |
+| **Inputs** | IMD best-track (intensity history) — **implemented, runtime**; ERA5 reanalysis (storm-centred profiles) and Satellite IR (MERG-IR, storm-centred recovered crops) — **designed, not wired at runtime** |
+| **Outputs** | `RIPrediction`: `probability_24h`, `risk_level`, `imd_probability`, `era5_probability`, `satellite_probability`, `fusion_probability`, `calibrated_probability`, `explanation`, `confidence`. **Note:** `calibrated_probability` is set to `imd_probability` directly (adapter aliases it); **no isotonic calibration is applied at inference** — the name is aspirational, not an applied method |
+| **Dataset** | Canonical `ri_multimodal_dataset.csv` (3,211 obs / 259 storms / 179 RI); ERA5: 848 obs / 107 storms; Satellite: 25 multimodal rows / 23 storms / 8 RI / 17 non-RI (26 recovered images, 9 RI / 17 non-RI); TCIR global: 2,840 obs / 64 storms / 189 RI — **UNVERIFIED / HISTORICAL CLAIM — NOT REPRODUCED FROM CURRENT REPOSITORY** (no dataset or results in repo) |
+| **Training Scripts** | `run_pipeline.py` (tabular IMD, IMD+ERA5), `tc_ri_cnn/train.py` (CNN, Colab — not reproducible from repo outputs), `run_final_multimodal.py` (fusion — requires absent result CSVs) |
+| **Inference Script** | `models/predict_ri.py` — legacy script that loads all three branches + fusion meta-model; **the fusion meta-model does not exist**, so `fusion_probability` cannot be produced |
+| **Model Artifacts** | `cyclone_backup/models/imd_final_xgboost.json` (**real, deployable — only runtime branch**), `cyclone_backup/models/era5_final_xgboost.json` (**runtime feature reconstruction not wired** — UNAVAILABLE), `cyclone_backup/models/satellite_cnn.pt` (**real fitted state dict, 308,705 params, loads — but inference NOT runnable in-repo**: fold-0 scaler `results/cnn_tabular_scaler.json` absent + storage `[0,1]`↔Kelvin preprocess mismatch; OOF claims unreproducible — UNVERIFIED), `imd_era5_final_xgboost.json` |
+| **Status** | **MVP / PROTOTYPE — IMD branch only is deployable today.** Honest negative results documented: IMD alone (PR-AUC 0.594) beats IMD+ERA5 (0.341) on strict common test set (20 storms / 25 RI); Satellite CNN OOF PR-AUC 0.516 on 9 obs and TCIR CNN PR-AUC 0.092 — both **UNVERIFIED / HISTORICAL CLAIM — NOT REPRODUCED FROM CURRENT REPOSITORY**; three-way fusion **NOT EVALUABLE** (only 1 of 9 satellite rows has ERA5) and **NO fusion meta-model exists in the repository** — `fusion_probability` cannot be produced |
 | **Metrics** | PR-AUC (primary), ROC-AUC, Precision, Recall, F1, Brier score, calibration (isotonic), storm-block bootstrap CIs |
 | **Dependencies** | XGBoost, PyTorch (CNN training), scikit-learn, Pandas, NumPy; ERA5 requires CDS API |
 
@@ -52,14 +52,14 @@ This document catalogs all existing models, datasets, training scripts, and arti
 | **Module** | `cyclone intensity/` |
 | **Model** | Tuned XGBoost Regressor (primary) + Extra Trees Regressor (secondary); both with `SimpleImputer(strategy='median')` pipeline |
 | **Inputs** | 30 features: 13 cyclone state/dynamics (`msw_kt`, `pressure_hpa`, `lat`, `lon`, `msw_change_6h/12h/24h`, `pressure_change_6h/12h/24h`, `lat_change_6h`, `lon_change_6h`, `movement_speed_kt`) + 17 ERA5 environmental (`era5_sst`, `era5_t850/700/500/200`, `era5_r850/700/500/200`, `era5_u850/700/500/200`, `era5_v850/700/500/200`) |
-| **Outputs** | `IntensityPrediction`: `predicted_msw_24h` (kt), `predicted_category` (IMD: D/DD/CS/SCS/VSCS/ESCS/SUCS), uncertainty (via CV spread), within-1-category accuracy |
-| **Dataset** | IMD Best Track (1982–2026) + IBTrACS cross-reference + ERA5 point-interpolated; final `clean_model_data.csv` = 486 obs / 30 storms |
-| **Training Script** | `main.py` → `src/regression.py` (`evaluate_regression_storm_cv`, `train_final_regression_model`) |
-| **Inference Script** | `main.py` (trains + evaluates); no standalone inference CLI yet |
-| **Model Artifact** | `models/final_xgb_regressor.joblib` (persisted after full-dataset fit) |
-| **Status** | **TRAINED / VALIDATED** — 5-fold storm-wise CV: MAE 14.55 kt, RMSE 19.66 kt, R² 0.037; Classification: Exact accuracy 45.3%, Within-1-category 84.0% |
-| **Metrics** | MAE, RMSE, R² (regression); Exact/Within-1 Accuracy, Macro/Weighted F1, Precision, Recall (classification) |
-| **Dependencies** | XGBoost, scikit-learn, Pandas, NumPy, joblib |
+| **Outputs** | `IntensityPrediction`: `predicted_msw_24h` (kt), `predicted_category` (IMD: D/DD/CS/SCS/VSCS/ESCS/SUCS), uncertainty (`uncertainty_kt` = `None` — point-forecast regressor; no calibrated per-prediction uncertainty), within-1-category accuracy |
+| **Dataset** | IMD Best Track (1982–2026) + IBTrACS cross-reference + ERA5 point-interpolated; final `clean_model_data.csv` = 486 obs / 30 storms — **dataset ABSENT from this repository** |
+| **Training Script** | `cyclone intensity/retrain.py` (deterministic retraining entry point, `random_state=42`, storm-wise `GroupKFold` on `storm_id`); legacy `main.py` → `src/regression.py` (`evaluate_regression_storm_cv`, `train_final_regression_model`) |
+| **Inference Script** | `src/models/adapters/intensity_adapter.py::create_intensity_adapter()` (loads `cyclone intensity/models/final_xgb_regressor.joblib`; reports `status="UNAVAILABLE"` if the artifact is missing, `"UNVERIFIED"` if present) |
+| **Model Artifact** | `models/final_xgb_regressor.joblib` — **ABSENT from this repository** (must be produced by `retrain.py` from the real dataset) |
+| **Status** | **UNAVAILABLE / UNVERIFIED** — no trained artifact, modeling dataset, or results exist in this repository; the pipeline cannot run until the real dataset is supplied and `retrain.py` reproduces the artifact. CV metrics below are **HISTORICAL CLAIM — NOT REPRODUCED FROM CURRENT REPOSITORY** (5-fold storm-wise CV: MAE 14.55 kt, RMSE 19.66 kt, R² 0.037; Classification: Exact accuracy 45.3%, Within-1-category 84.0%). R² ≈ 0.037 indicates near-zero explained variance on that historical run |
+| **Metrics** | MAE, RMSE, R² (regression); Exact/Within-1 Accuracy, Macro/Weighted F1, Precision, Recall (classification) — see previous row for verification status |
+| **Dependencies** | XGBoost, scikit-learn, Pandas, NumPy, joblib, seaborn (plotting helpers in `cyclone intensity/src/utils.py`) |
 
 ---
 
@@ -81,59 +81,61 @@ This document catalogs all existing models, datasets, training scripts, and arti
 
 ---
 
-## 5. RAINFALL PREDICTION
+## 5. RAINFALL (SAME-TIME CLASSIFICATION — BASELINE)
 
 | Field | Details |
 |-------|---------|
 | **Module** | `rain/` |
-| **Model** | Random Forest Classifier (`rainfall_classifier_12.pkl` ~16 MB) — predicts rainfall categories from IMERG + cyclone features |
+| **Model** | Random Forest **binary classifier** (`rainfall_classifier_12.pkl`, bare `RandomForestClassifier`, 25 features — NOT a Pipeline) — labels heavy rain (≥ 10 mm/hr) vs light from IMERG + cyclone features at the **same timestamp**; the documented "two-stage" regressor half is **absent** from the repo |
 | **Inputs** | IMERG rainfall grids + cyclone best-track (FANI 2019 case study); consolidated tracks for 5 IMD cyclones |
-| **Outputs** | Rainfall classification grids (categorical) |
+| **Outputs** | Heavy/light rainfall labels at time t (same-time), predicted for the FANI 2019 case-study window |
 | **Dataset** | `FANI_2019_IMERG_20190430_0000_0600.csv` (12.6 MB), `consolidated_cyclone_tracks_5_IMD.csv`, `FANI_2019_best_track.csv` |
 | **Training Script** | Not found in repo (model appears pre-trained) |
 | **Inference Script** | Not found |
 | **Model Artifact** | `model/rainfall_classifier_12.pkl` |
 | **Results** | `results/model12_results.csv` (7.1 MB) |
-| **Status** | **BASELINE ONLY** — appears to be a same-time classifier on FANI case study; **not a future rainfall forecasting model**; no future-horizon prediction capability evident |
-| **Metrics** | Not documented in repo |
+| **Status** | **BASELINE ONLY** — verified **same-time classifier** (label at the same timestamp as features; largest lead is a rainfall lag of 60 min). **NOT a future rainfall forecasting model.** Split = temporal holdout (last 4 of 12 half-hourly FANI snapshots), NOT spatial. Feature-engineering code absent → target-derived lag/rolling features (10 of 25) unverifiable |
+| **Metrics** | `rain/metadata/rainfall_model_12_metadata.json` metrics (P 0.9197 / R 0.9785 / F1 0.9482, MAE 0.0785) **reproduce from `results/model12_results.csv`** — but only for FANI 2019, same-storm same-day, with autoregressive features crossing the 30-min train/test boundary (optimistic) |
+| **Validation** | Temporal holdout (04:00–05:30, 4×28,000 cells) — the earlier "spatial holdout" label was incorrect and is corrected in Phase 10 |
 | **Dependencies** | scikit-learn, Pandas, NumPy |
 
 ---
 
-## 6. WIND FIELD PREDICTION
+## 6. WIND FIELD (BASELINE — CASE STUDY)
 
 | Field | Details |
 |-------|---------|
 | **Module** | `wind/` |
-| **Model** | Keras model (`wind_model_best.keras` ~5.2 MB, also `wind_model.keras` at root) |
-| **Inputs** | Not explicitly documented; likely cyclone state + environmental fields |
-| **Outputs** | Wind field predictions (U/V components or speed/direction grids) |
-| **Dataset** | IBTrACS 4 cyclones (`ibtracs_four_cyclones.csv`); Yaas case study images in `results/` |
+| **Model** | Keras **ConvLSTM2D encoder–decoder** (`wind_model_best.keras` ~5.2 MB): input (6, 81, 57, 2) U10/V10 grids → output (81, 57, 2) "future_wind" U10/V10 (m/s). Horizon/alignment **undocumented** (no training script) |
+| **Inputs** | 6 frames of U10/V10 wind grids (m/s); grid extents undocumented |
+| **Outputs** | Wind field grids (U10/V10, m/s) — same-shape as input; "future" framing not verifiable |
+| **Dataset** | IBTrACS 4 cyclones (`ibtracs_four_cyclones.csv`); Yaas 2021 case-study images in `results/` |
 | **Training Script** | Not found in repo |
 | **Inference Script** | Not found |
-| **Model Artifact** | `model/wind_model_best.keras`, `wind_model.keras` |
+| **Model Artifact** | `model/wind_model_best.keras`, `wind_model.keras`; preprocessing = `wind_normalization.txt` only (no scaler object) |
+| **Runtime note (Phase 10)** | The `.keras` artifact **cannot be loaded in the current environment**: `import tensorflow` hard-aborts the interpreter (SIGABRT, libc++ mutex failure). The adapter probes TF import health in a subprocess and returns explicit `UNAVAILABLE` with no fabricated output. **Not runnable until a working TF runtime is provided and an inference pipeline (data recipe + scaler + horizon definition) exists.** |
 | **Results** | `results/yaas_predicted_wind.png`, `results/yaas_actual_wind.png`, `results/yaas_wind_error.png` |
-| **Status** | **BASELINE / PROTOTYPE** — single case study (Yaas); architecture/training not documented; no inference pipeline |
-| **Metrics** | Visual comparison only (error map) |
+| **Status** | **BASELINE / CASE STUDY** — single case study (Yaas); architecture/training not documented; no inference pipeline; overheated "future wind" claim in schema corrected (Phase 10). Orchestrator returns UNAVAILABLE (not registered) |
+| **Metrics** | Visual comparison only (error map); no numeric evaluation |
 | **Dependencies** | TensorFlow/Keras |
 
 ---
 
-## 7. FLASH FLOOD PREDICTION
+## 7. FLOOD (STATIC SPATIAL CLASSIFICATION — CASE STUDY)
 
 | Field | Details |
 |-------|---------|
 | **Module** | `flood/` |
-| **Model** | XGBoost spatial holdout model (`flood_xgboost_spatial_holdout.pkl` ~510 KB) |
-| **Inputs** | Training grid: `fani_flood_training_grid.csv` (174 KB) with rainfall, terrain, hydrology, land cover, soil features; EMSR357 flood extent data |
-| **Outputs** | Flood probability grid, risk map |
-| **Dataset** | FANI 2019 flood event; IMERG rainfall; DEM/drainage; EMSR357 AOI01 extracted data |
+| **Model** | XGBoost **static spatial flood-extent classifier** (`flood_xgboost_spatial_holdout.pkl` ~510 KB, 28 raw features) — NOT a forecast, NOT a validated risk model |
+| **Inputs** | 16 IMERG rainfall features (current + past lags only) + 12 static hydrology features (distance to water/river/lake/reservoir/inundation area, proximity counts). **No terrain/DEM/land-cover/soil features exist in the repo**, despite earlier docs claiming them |
+| **Outputs** | Probability grid, risk map (static spatial surface) |
+| **Dataset** | FANI 2019 flood event; IMERG rainfall; EMSR357 AOI01 extracted data (Copernicus post-event "Delineation" layer, dated 2019-05-05). **LABEL NOTE:** labels are per-cell constant across all 97 timestamps — the post-event satellite map is propagated back to pre-storm times (whole-event label leak); two inconsistent label schemes exist in-repo (3-cell L1 vs 70-cell L2; results match L2, metrics match neither) |
 | **Training Script** | Not found in repo |
-| **Inference Script** | Not found |
+| **Inference Script** | Not found; demo outputs were produced with **zero-filled rainfall/terrain features** (reproduces 374/374 demo cell probabilities) — fabricated inputs outside the repo code |
 | **Model Artifact** | `model/flood_xgboost_spatial_holdout.pkl` |
 | **Results** | `results/fani_flood_demo_output.csv` (3.5 MB), `results/fani_flood_risk_map.png`, `results/fani_flood_demo_summary.json` |
-| **Status** | **BASELINE / CASE STUDY** — single event (FANI); spatial holdout validation; no temporal generalization demonstrated |
-| **Metrics** | Not documented in repo |
+| **Status** | **BASELINE / CASE STUDY** — single event (FANI); spatial-holdout metrics **UNVERIFIED / HISTORICAL CLAIM — NOT REPRODUCED FROM CURRENT REPOSITORY** (claimed ROC-AUC 0.9635 / PR-AUC 0.814; the exact 94-cell holdout split is not in the repo, so cannot be reproduced). "Temporal validation" file uses training-period timestamps + all 374 cells with per-cell-constant labels showing ~100% accuracy — **not a valid temporal holdout** |
+| **Metrics** | Not reproducible from repo (see Status) |
 | **Dependencies** | XGBoost, scikit-learn, Pandas, NumPy |
 
 ---
@@ -161,10 +163,10 @@ This document catalogs all existing models, datasets, training scripts, and arti
 | IMD Best Track | `cyclone intensity/data/raw/` | — | Primary official records (1982–2026) |
 | ERA5 Pressure Levels | `cyclone_backup/ERA5_expanded/*.nc` | ~20 files | Reanalysis for specific storm dates |
 | ERA5 RI Features | `cyclone_backup/models/RI_ERA5_features_MVP.csv` | 393 KB | 848 obs / 107 storms |
-| IMD RI Training Base | `cyclone_backup/models/IMD_BoB_RI_training_base.csv` | 504 KB | 3,211 obs / 259 storms |
+| IMD RI Training Base | `cyclone_backup/models/IMD_BoB_RI_training_base.csv` | 504 KB | 5,009 obs / 291 storms / 179 RI (BoB, RI prevalence 5.6%) |
 | Multimodal RI Dataset | `cyclone_backup/ri_multimodal_dataset.csv` | 989 KB | Canonical joined table |
-| Satellite Recovered | `cyclone_backup/satellite_cnn_recovered/images/*.npy` | 26 files | 128×128 IR crops |
-| TCIR Global | `cyclone_backup/models/tcir/` | — | Global IR+MW dataset |
+| Satellite Recovered | `cyclone_backup/satellite_cnn_recovered/images/*.npy` | 26 files | 128×128 IR crops (25 in multimodal table / 23 storms / 8 RI / 17 non-RI); 16/26 source MERG-IR granules in repo |
+| TCIR Global | `cyclone_backup/models/tcir/` | — | **Model artifact + normalisation stats only; dataset ABSENT** — "2,840 obs / 64 storms / 189 RI" is UNVERIFIED / HISTORICAL CLAIM |
 | IMERG Rainfall | `rain/data/FANI_2019_IMERG_*.csv` | 12.6 MB | FANI case study |
 | Flood Training Grid | `flood/data/fani_flood_training_grid.csv` | 174 KB | FANI flood features |
 | CMEMS Ocean | `cyclone_backup/models/cmems_*.nc` | ~47 MB total | Ocean heat content / TCHP |
@@ -176,17 +178,17 @@ This document catalogs all existing models, datasets, training scripts, and arti
 
 | Model | Path | Format | Status |
 |-------|------|--------|--------|
-| Track V12 | `cyclone_path/checkpoints/v12_best_model.pt` | PyTorch | Production |
-| RI IMD | `cyclone_backup/models/imd_final_xgboost.json` | XGBoost JSON | Validated |
-| RI ERA5 | `cyclone_backup/models/era5_final_xgboost.json` | XGBoost JSON | Validated |
-| RI IMD+ERA5 | `cyclone_backup/models/imd_era5_final_xgboost.json` | XGBoost JSON | Validated |
-| RI Satellite CNN | `cyclone_backup/models/satellite_cnn.pt` | PyTorch | Trained (Colab) |
-| RI TCIR CNN | `cyclone_backup/models/tcir/` | Keras/NPZ | Pre-computed OOF |
-| Intensity XGBoost | `cyclone intensity/models/final_xgb_regressor.joblib` | joblib | Trained |
-| Recurvature XGBoost | `recurvature/xgb_recurve_model.json` | XGBoost JSON | Trained |
-| Rainfall RF | `rain/model/rainfall_classifier_12.pkl` | pickle | Baseline |
-| Flood XGBoost | `flood/model/flood_xgboost_spatial_holdout.pkl` | pickle | Case study |
-| Wind Keras | `wind/model/wind_model_best.keras` | Keras | Case study |
+| Track V12 (distilled) | `best_cyclone_model_lt3p_distilled.pth` (repo root, + `scalers.pkl`) | PyTorch | **LIMITED/UNVERIFIED** (real inference; uncertainty NOT calibrated) |
+| RI IMD | `cyclone_backup/models/imd_final_xgboost.json` | XGBoost JSON | AVAILABLE |
+| RI ERA5 | `cyclone_backup/models/era5_final_xgboost.json` | XGBoost JSON | UNAVAILABLE (features not wired) |
+| RI IMD+ERA5 | `cyclone_backup/models/imd_era5_final_xgboost.json` | XGBoost JSON | Validated HISTORICALLY (degraded skill vs IMD-only) |
+| RI Satellite CNN | `cyclone_backup/models/satellite_cnn.pt` | PyTorch | Real fitted state dict (308,705 params) that loads — **inference NOT runnable in-repo** (fold-0 scaler absent; storage `[0,1]`↔Kelvin mismatch); OOF PR-AUC 0.516 is UNVERIFIED / HISTORICAL CLAIM |
+| RI TCIR CNN | `cyclone_backup/models/tcir/` | Keras/NPZ | **Artifact only** — OOF (PR-AUC 0.092) is UNVERIFIED / HISTORICAL CLAIM — no dataset/results in repo; channel-4 norm stats inf/nan; cannot run in current env |
+| Intensity XGBoost | `cyclone intensity/models/final_xgb_regressor.joblib` | joblib | **ABSENT** — retrain via `cyclone intensity/retrain.py` |
+| Recurvature XGBoost | `recurvature/xgb_recurve_model.json` | XGBoost JSON | Trained (baseline) |
+| Rainfall RF | `rain/model/rainfall_classifier_12.pkl` | pickle | Baseline (same-time) |
+| Flood XGBoost | `flood/model/flood_xgboost_spatial_holdout.pkl` | pickle | Case study (FANI) |
+| Wind Keras | `wind/model/wind_model_best.keras` | Keras | Case study (Yaas) |
 
 ---
 
@@ -195,8 +197,8 @@ This document catalogs all existing models, datasets, training scripts, and arti
 | Component | Reuse Strategy |
 |-----------|----------------|
 | `CycloneTransformerV11` (Track) | Wrap as `TrajectoryModelAdapter` → `TrackPrediction` schema |
-| RI IMD/ERA5 XGBoost models | Wrap as `RIModelAdapter` (IMD branch + ERA5 branch + fusion) → `RIPrediction` schema |
-| RI Satellite CNN (`RICNNFusion`) | Wrap as `RISatelliteBranchAdapter` → satellite probability for fusion |
+| RI IMD/ERA5 XGBoost models | Wrap as `RIModelAdapter` (IMD branch + ERA5 branch + fusion) → `RIPrediction` schema *(IMD only at runtime; ERA5/fusion designed)* |
+| RI Satellite CNN (`RICNNFusion`) | Wrap as `RISatelliteBranchAdapter` → satellite probability for fusion *(designed — artifact present but inference not runnable in-repo)* |
 | Intensity XGBoost | Wrap as `IntensityModelAdapter` → `IntensityPrediction` schema |
 | Recurvature XGBoost | Wrap as `RecurvatureModelAdapter` → `RecurvaturePrediction` schema |
 | Storm-wise splitting logic | Extract to `src/core/splitting.py` — shared across all models |
@@ -239,7 +241,7 @@ This document catalogs all existing models, datasets, training scripts, and arti
 | **Pipeline Orchestrator** | ❌ Not implemented | No dependency-aware execution |
 | **CLI for Full Pipeline** | ❌ Not implemented | Only per-module scripts exist |
 | **Configuration System** | ❌ Partial | Only `cyclone_backup/config.yaml` and intensity `requirements.txt` |
-| **Uncertainty Quantification** | Partial | Track has `sigma_km`; RI has calibration; others lack |
+| **Uncertainty Quantification** | Partial | Track exports `sigma_km` but the head is **saturated ~209.9 km — NOT calibrated, NOT horizon-growing**; RI `calibrated_probability` is an **alias for `imd_probability` (no applied calibration)**; Recurvature confidence fixed at 0.55; Genesis `calibrated=False`, `calibrated_probability=None`; Intensity has none |
 | **Explainability Layer** | Partial | RI has SHAP/Grad-CAM; not unified |
 | **Storm-wise Test Set Protection** | Partial | RI and Intensity enforce; others unclear |
 | **Leakage Audit** | Partial | RI has `LEAKAGE_AUDIT.md`; not systemic |
@@ -440,7 +442,7 @@ import xgboost
 | **Outputs** | `GenesisPrediction`: `probability_24h` + `@computed_field probability`, `risk_level`, `confidence`, `model_version`, `mode`, `model_name`, `threshold`, `predicted_class`, `raw_probability`, `calibrated_probability` (None), `provenance`, `artifact_hash/path`, `feature_schema`, ensemble component fields, `candidate_lat/lon`, `explanation` |
 | **Threshold** | **0.24** (configurable, `DEFAULT_GENESIS_THRESHOLD`; not re-optimized at inference) |
 | **Calibration** | No calibration artifact exists → raw weighted probabilities retained, `calibrated=False`, `calibrated_probability=None` |
-| **Dataset** | 300 samples / 150-150 train-test split / 191 NIO storms / 2015–2024 |
+| **Dataset** | 300 samples (150 genesis / 150 non-genesis, class-balanced) / 191 NIO storms / 2015–2024 — **per the external source report only**; the training data, training script, and CV/test metrics are **NOT in this repository** (historical claim, not reproducible from the current repo) |
 | **Status** | **PROTOTYPE** — features (SST/SST-anomaly/TCHP/OHC700) are synthetic; storm-aware CV metrics < held-out test metrics; **not** production-validated |
 | **Model Registry** | Registered in `ModelFactory` as `genesis`, `genesis_lightgbm` (production), `genesis_soft_voting_ensemble`; `ModelAdapter` alias enabled |
 | **Failure Mode (honest)** | Missing any required artifact → `UNAVAILABLE` for that mode; no model substitution → `RuntimeError` if unavailable mode requested |
@@ -591,9 +593,9 @@ import xgboost
 | Module | Adapter Location | Status | Model Artifact | Framework | Notes |
 |--------|-----------------|--------|----------------|-----------|-------|
 | **Genesis** | `src/models/genesis/adapter.py` | ✅ IMPLEMENTED (**AVAILABLE**) | `genisis models/tc_genesis_lightgbm_300_OPTIMIZED.joblib` (+ XGBoost, RF for ensemble) | LightGBM / XGBoost / sklearn RF | P(genesis); LightGBM production + soft-voting ensemble; see Section 16 |
-| **Trajectory** | `src/models/adapters/trajectory_adapter.py` | ✅ IMPLEMENTED | `cyclone_path/checkpoints/v12_best_model.pt` | PyTorch | V12 Transformer, production-ready |
+| **Trajectory** | `src/models/adapters/trajectory_adapter.py` | ✅ IMPLEMENTED | `best_cyclone_model_lt3p_distilled.pth` (repo root) | PyTorch | V12-distilled Transformer; real inference — **LIMITED/UNVERIFIED** (uncertainty saturated ~209.9 km, NOT calibrated) |
 | **Intensity** | `src/models/adapters/intensity_adapter.py` | ✅ IMPLEMENTED | `cyclone intensity/models/final_xgb_regressor.joblib` | XGBoost | Requires training (artifact not yet generated) |
-| **RI** | `src/models/adapters/ri_adapter.py` | ✅ IMPLEMENTED | `cyclone_backup/models/imd_final_xgboost.json` + ERA5 + Satellite CNN | XGBoost + PyTorch | Multimodal (IMD, ERA5, Satellite) |
+| **RI** | `src/models/adapters/ri_adapter.py` | ✅ IMPLEMENTED (**IMD-only at runtime**) | `cyclone_backup/models/imd_final_xgboost.json` | XGBoost | Single-source (IMD) at runtime. ERA5/satellite/fusion branches are **designed, NOT wired** (artifacts exist but fail or are absent in-repo); `satellite_probability`/`fusion_probability` = None. See Phase 9 audit |
 | **Recurvature** | `src/models/adapters/recurvature_adapter.py` | ✅ IMPLEMENTED | `recurvature/xgb_recurve_model.json` | XGBoost | **FIXED**: Now uses XGBClassifier (not Booster) for predict_proba |
 | **Rainfall** | `src/models/rainfall/adapter.py` | ✅ IMPLEMENTED (BASELINE) | `rain/model/rainfall_classifier_12.pkl` | sklearn (RF) | Same-time classifier, not forecast |
 | **Wind** | `src/models/wind/adapter.py` | ✅ IMPLEMENTED (BASELINE) | `wind/model/wind_model_best.keras` | TensorFlow/Keras | Yaas case study only |
@@ -617,9 +619,9 @@ import xgboost
 
 ### 19.4 Test Suite Status
 
-- **All Tests**: 143/143 PASS
+- **All Tests**: 169/169 PASS
 - **Native Compatibility**: 8/8 PASS (10/10 consecutive runs stable)
-- **Genesis**: 44/44 PASS (incl. fidelity, CatBoost/ExtraTrees rejection, missing-artifact honesty)
+- **Genesis**: 46/46 PASS (incl. fidelity, CatBoost/ExtraTrees rejection, missing-artifact honesty, `_y` non-duplication, uncalibrated ensemble)
 - **Orchestrator**: 9/9 PASS
 - **Adapters**: 11/11 PASS
 - **Harmonizer**: 21/21 PASS (fixed pandas frequency string case sensitivity)
@@ -631,8 +633,8 @@ import xgboost
 
 | Model | Classification | Reason |
 |-------|---------------|--------|
-| Trajectory | **AVAILABLE** | Production-ready V12 checkpoint |
-| RI | **AVAILABLE** | Multimodal (IMD+ERA5+Satellite) |
+| Trajectory | **LIMITED / UNVERIFIED** | Real point-forecast inference via `best_cyclone_model_lt3p_distilled.pth`; **uncertainty head saturated (~209.9 km), NOT calibrated, NOT horizon-growing**; point-forecast skill not re-verified in-repo |
+| RI | **LIMITED (IMD-ONLY)** | IMD branch deployable; ERA5 features not wired, Satellite CNN artifact exists but inference NOT runnable in-repo (fold-0 scaler absent; `[0,1]`↔Kelvin mismatch; OOF claims = HISTORICAL CLAIMs), **no fusion meta-model exists** |
 | Recurvature | **AVAILABLE** | Fixed XGBClassifier adapter |
 | Intensity | **ARTIFACT_MISSING** | Training script exists but artifact not generated |
 | Rainfall | **AVAILABLE_BASELINE** | Same-time classifier, not forecast |

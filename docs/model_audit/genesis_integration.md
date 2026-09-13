@@ -19,7 +19,7 @@ non-`OPTIMIZED` variants.
 | Item | Value |
 |------|-------|
 | **Production model** | **LightGBM** (`LGBMClassifier`) |
-| **Secondary path** | Calibrated soft-voting ensemble: LightGBM 0.40 / XGBoost 0.35 / RandomForest 0.25 |
+| **Secondary path** | Soft-voting ensemble (uncalibrated): LightGBM 0.40 / XGBoost 0.35 / RandomForest 0.25 |
 | **Approved models (strict)** | LightGBM, XGBoost, RandomForest — only |
 | **Collective threshold** | **0.24** (not re-optimized at inference) |
 | **Target** | `genesis_24h` (binary) |
@@ -85,6 +85,22 @@ tchp_kj_cm2_y, ohc700_kj_cm2_y
 - 34 columns, exact order fed to the embedded imputer/model.
 - Source mapping in `GenesisModelAdapter._build_feature_frame` pulls from
   `CycloneState.environmental_features` and `ocean_features`.
+- **Feature provenance (what actually reaches the models):**
+
+  | Source | Features | Notes |
+  |--------|----------|-------|
+  | `ocean_features.tchp` | `tchp_kj_cm2_x` | NaN → median-imputed unless caller sets it |
+  | `ocean_features.ocean_heat_content` | `ohc700_kj_cm2_x` | NaN → median-imputed unless caller sets it |
+  | `environmental_features` per level | `u/v/r/t` at 850/700/500/200 hPa | populated only if the ERA5 provider fills these |
+  | `environmental_features.sst` / `.sst_anomaly` | `sst`, `sst_anomaly` | sst_anomaly needs climatology; not populated by `state.py` |
+  | Not in TOOFAN schema | `w/q/z` at 850/700/500/200 hPa (12 features) | always NaN → median-imputed |
+  | Not reconstructible | `tchp_kj_cm2_y`, `ohc700_kj_cm2_y` | distinct training-time merge values; always NaN → median-imputed (Phase 8) |
+
+  In current pipeline operation `_load_ocean_features` returns only `sst`
+  (never `tchp`/`ocean_heat_content`), so a large fraction of the 34 features
+  run on **median-imputed placeholders**. Genesis is therefore a prototype
+  that is only fully exercised when a caller supplies a complete
+  `CycloneState`.
 
 ---
 
@@ -115,12 +131,16 @@ ensemble_prob = 0.40*P_lgbm + 0.35*P_xgb + 0.25*P_rf
 
 ## 7. Dataset / Scientific Caveat (PROTOTYPE)
 
-- 300 samples / 150 genesis / 150 non-genesis.
+- 300 samples (150 genesis / 150 non-genesis), class-balanced.
 - 191 North Indian Ocean storms; 2015–2024.
 - Source notes report **synthetic SST/SST-anomaly** and **synthetic
   TCHP/OHC700** features.
 - Storm-aware CV metrics were **lower** than held-out test metrics → treat the
   reported test performance with caution.
+- **Reproducibility caveat (Phase 8):** no training data, training script, or
+  evaluation output exists in this repository. Every value in the bullets above
+  comes from the external source report and is therefore a **HISTORICAL CLAIM —
+  NOT REPRODUCED FROM CURRENT REPOSITORY**.
 - The integration **must not** be represented as production-validated. The
   `explanation` field in every `GenesisPrediction` records this caveat.
 
@@ -169,8 +189,9 @@ Ensemble provenance additionally records weights and per-member artifact hashes.
 
 ### 11.1 Fidelity
 
-Adapter predictions match direct loading of each pipeline to **1e-12** for all
-three models (LightGBM, XGBoost, RandomForest).
+Adapter predictions match direct loading of each pipeline to **1e-9** for all
+three models (LightGBM, XGBoost, RandomForest) — test tolerance in
+`tests/test_genesis.py::TestFidelity`.
 
 ### 11.2 Ensemble arithmetic
 
@@ -188,9 +209,9 @@ Artifacts wrapping CatBoost / ExtraTrees are refused by the `_GenesisComponent`
 
 ### 11.5 Test suite
 
-- `tests/test_genesis.py`: **44/44 pass** (sections A–Q + fidelity).
-- Full suite `tests/` (via `python -m pytest`): **143/143 pass**.
-- Stable across 6 consecutive full-suite runs (see Section 12).
+- `tests/test_genesis.py`: **46/46 pass** (sections A–Q + fidelity + Phase 8
+  `_y`-non-duplication and uncalibrated-ensemble regression tests).
+- Full suite `tests/` (via `python -m pytest`): **169/169 pass**.
 
 ---
 
@@ -220,7 +241,7 @@ race between multiple OpenMP runtimes.
 
 ### 12.3 Verification
 
-`python -m pytest tests/ -q` → **143 passed**; stable over 6 consecutive runs.
+`python -m pytest tests/ -q` → **169 passed**; stable over 6 consecutive runs.
 
 ---
 
@@ -253,7 +274,14 @@ Dependency: `lightgbm>=4.0.0` added to `requirements.txt` and `pyproject.toml`.
 ## 14. Known Limitations
 
 - **PROTOTYPE** — synthetic oceanic features; not operationally validated.
-- No calibration artifact → `calibrated_probability=None`, `calibrated=False`.
+- No calibration artifact → `calibrated_probability=None`, `calibrated=False`;
+  the soft-voting ensemble is **uncalibrated**.
+- Training data/script/metrics are absent from the repo → all dataset and
+  performance claims are external source-report claims (HISTORICAL CLAIM).
+- `tchp_kj_cm2_y` / `ohc700_kj_cm2_y` are distinct training-time values that
+  cannot be reconstructed from `CycloneState`; they are kept NaN and
+  median-imputed (Phase 8 fix — they are NEVER auto-filled from the `_x`
+  columns).
 - Threshold (0.24) is fixed from documentation; not re-optimized at inference.
 - Ensemble requires all three artifacts and never degrades to a partial ensemble.
 - Native compat fix depends on a Homebrew/system `libomp` being discoverable on

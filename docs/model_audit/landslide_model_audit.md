@@ -43,7 +43,7 @@ filename scan for `landslide|slide|suscept|slope`.
 | # | Artifact | Location | Nature |
 |---|----------|----------|--------|
 | 1–16 | All `genisis models/*.joblib` | `genisis models/` | **Genesis TC-formation** (34-feature; LGBM/XGB/RF/ExtraTrees/CatBoost) |
-| 17 | `cyclone_path/checkpoints/v12_best_model.pt` | Trajectory | PyTorch Transformer — *not* landslide |
+| 17 | `best_cyclone_model_lt3p_distilled.pth` (repo root). Legacy path `cyclone_path/checkpoints/v12_best_model.pt` no longer exists. | Trajectory | PyTorch Transformer — *not* landslide |
 | 18 | `cyclone_backup/models/satellite_cnn.pt` | RI | PyTorch CNN — *not* landslide |
 | 19–22 | `cyclone_backup/models/*.keras` (satellite + TCIR) | RI | Keras — *not* landslide |
 | 23 | `cyclone_backup/models/xgboost_IMD_only_baseline.pkl` | RI | XGBoost, 12 IMD features — *not* landslide |

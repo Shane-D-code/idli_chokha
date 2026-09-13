@@ -36,6 +36,11 @@ export default function IntensityPage() {
   const leadAvail = ri?.leadProbability !== undefined;
   const members = ri?.models ?? [];
 
+  // The intensity adapter only produces a forecast when its prediction status
+  // is a real availability-class value; UNAVAILABLE means the artifact is not
+  // present and the profile must not be drawn as a real forecast.
+  const intensityUsable = data?.status.status !== "UNAVAILABLE" && !!data?.forecastPoints?.length;
+
   return (
     <div className="page">
       <div className="page-head">
@@ -107,10 +112,10 @@ export default function IntensityPage() {
             {data?.status ? <StatusLabel status={data.status.status} /> : null}
           </div>
           <div className="panel-body">
-            {data && data.forecastPoints && data.forecastPoints.length > 0 ? (
+            {intensityUsable ? (
               <IntensityChart
-                points={data.forecastPoints}
-                currentWindKt={data.current.windKt}
+                points={data!.forecastPoints!}
+                currentWindKt={data!.current.windKt}
               />
             ) : (
               <EmptyState
@@ -123,7 +128,7 @@ export default function IntensityPage() {
       </div>
 
       {/* ═══ INTENSITY FORECAST TABLE ═══ */}
-      {data && data.forecastPoints && data.forecastPoints.length > 0 && (
+      {intensityUsable && (
         <>
           <SectionLabel label="Intensity Forecast" strong />
           <div className="panel" style={{ marginTop: "var(--sp-2)", marginBottom: "var(--section-gap)" }}>
@@ -137,7 +142,7 @@ export default function IntensityPage() {
                 </tr>
               </thead>
               <tbody>
-                {data.forecastPoints.map((p) => (
+                {(data?.forecastPoints ?? []).map((p) => (
                   <tr key={p.horizonHours}>
                     <td className="mono">+{p.horizonHours}h</td>
                     <td className="mono">{p.windKt ?? "—"}</td>
@@ -193,6 +198,16 @@ function riskForProbability(p: number): HazardSeverity {
 }
 
 function ModelRow({ m }: { m: RIModelOutput }) {
+  // An RI model whose adapter reports an unavailable-class status has NO
+  // legitimate probability/risk — values would be fabricated. Only models with
+  // a real output carry a metric.
+  const hasOutput =
+    m.status !== "UNAVAILABLE" &&
+    m.status !== "DATA_UNAVAILABLE" &&
+    m.status !== "NOT_IMPLEMENTED" &&
+    m.status !== "RUNTIME_REQUIRED" &&
+    m.status !== "MODEL_MISSING";
+
   return (
     <div className="panel">
       <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "var(--sp-2)" }}>
@@ -203,13 +218,13 @@ function ModelRow({ m }: { m: RIModelOutput }) {
           <div className="small muted">{m.inputType}</div>
         </div>
         <div className="row gap-8">
-          {m.risk ? <RiskPill severity={m.risk} /> : null}
+          {hasOutput && m.risk ? <RiskPill severity={m.risk} /> : null}
           <StatusLabel status={m.status} />
         </div>
       </div>
       <ThinDivider />
       <div className="metric-grid">
-        <MetricBlock label="Probability" value={m.probability !== undefined ? `${(m.probability * 100).toFixed(1)}%` : "—"} size="sm" />
+        <MetricBlock label="Probability" value={hasOutput && m.probability !== undefined ? `${(m.probability * 100).toFixed(1)}%` : "—"} size="sm" />
         <MetricBlock label="Framework" value={m.framework ?? "—"} size="sm" />
         <MetricBlock label="Features" value={m.featureCount ?? "—"} size="sm" />
       </div>

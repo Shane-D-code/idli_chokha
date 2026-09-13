@@ -2,6 +2,31 @@
 
 A machine-learning framework for **24-hour tropical cyclone intensity forecasting** and **India Meteorological Department (IMD) cyclone grade classification** using historical cyclone best-track records and ECMWF ERA5 reanalysis environmental data.
 
+> ## Reproducibility Status (TOOFAN Phase 6 audit)
+>
+> **The `data/`, `models/`, and `results/` directories are NOT present in this
+> repository snapshot.** No trained artifact, modeling dataset, or validation
+> outputs can be loaded or reproduced from here, so the pipeline cannot
+> currently run and the metrics in the "Key Results" section below are
+> **HISTORICAL CLAIMS — NOT REPRODUCED FROM THIS REPOSITORY**
+> (phase-out when a new artifact + training report are produced).
+>
+> - **Status: UNAVAILABLE / UNVERIFIED**
+> - **Retraining entry point:** `python retrain.py --data auto` (deterministic:
+>   `random_state=42`, storm-wise `GroupKFold` on `storm_id`). When absent,
+>   `retrain.py` prints the exact expected data schema and the real-data recipe
+>   — it never fabricates or substitutes data.
+> - **Inference:** `create_intensity_adapter()` reports `status="UNAVAILABLE"`
+>   when the artifact is missing and `"UNVERIFIED"` with an explicit `reason`
+>   when it is present (per-prediction uncertainty is not calibrated →
+>   `uncertainty_kt=None`; the historical 14.554 kt MAE is **not** used as a
+>   per-input uncertainty value).
+> - **Notable training-method finding (usable when data returns):** the code
+>   builds features strictly as-of the row time (lags ≤ +1.5h tolerance), the
+>   +24h target is matched at t+24h ± 2h, and evaluation is storm-wise
+>   `GroupKFold` — i.e. **no random row splits and no obvious lookahead
+>   leakage** in the preprocessor.
+
 ---
 
 ## Executive Summary & Objectives
@@ -175,6 +200,20 @@ To run the complete storm-wise cross-validation pipeline, evaluate regression, c
 ```bash
 python main.py
 ```
+
+**Deterministic retraining (recommended entry point):**
+
+```bash
+python retrain.py --data auto           # uses data/processed/clean_model_data.{csv,parquet}
+python retrain.py --data path/to/clean_model_data.csv --n-splits 5
+python retrain.py --data auto --validate-only    # check schema only
+```
+
+`retrain.py` validates the expected schema (the 30 predictor columns +
+`storm_id` + `msw_target_24h`), runs the storm-wise CV, fits and saves
+`models/final_xgb_regressor.joblib`, and writes `models/training_report.json`
+with the metrics from **that run**. If the dataset is absent it prints the
+exact recipe and refuses to fabricate data.
 
 ### Outputs Generated:
 - `results/metrics/regression_metrics.csv`: Cross-validation MAE, RMSE, $R^2$.

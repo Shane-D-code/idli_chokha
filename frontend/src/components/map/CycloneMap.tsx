@@ -683,7 +683,7 @@ export function CycloneMap({
           `<div class="mono">${pt.latitude.toFixed(2)}°N &nbsp;${pt.longitude.toFixed(2)}°E</div>`,
           `<div class="small muted">${new Date(pt.timestamp).toISOString()}</div>`,
           pt.uncertaintyKm
-            ? `<div class="small">Uncertainty: ±${pt.uncertaintyKm} km</div>`
+            ? `<div class="small">Uncertainty: ±${pt.uncertaintyKm} km (uncalibrated band${isDemo ? ", demo" : ""})</div>`
             : "",
         ].join("");
         showPopup(html, [e.lngLat.lng, e.lngLat.lat]);
@@ -788,7 +788,9 @@ function buildCone(points: TrackPoint[]): GeoJSON.Feature<GeoJSON.Polygon> | nul
     const p = points[i];
     const kmPerDegLat = 111;
     const kmPerDegLon = 111 * Math.cos((p.latitude * Math.PI) / 180);
-    const unc = p.uncertaintyKm ?? 20;
+    // No fallback corridor: when a point carries no uncertainty value the band
+    // simply pinches there instead of fabricating a default +/-10 km radius.
+    const unc = p.uncertaintyKm ?? 0;
     const latOff = unc / kmPerDegLat;
     const lonOff = unc / kmPerDegLon;
     left.push([p.longitude - lonOff * 0.5, p.latitude - latOff * 0.5]);

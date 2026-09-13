@@ -46,7 +46,7 @@ class ModuleName(str, Enum):
 class ModuleSpec:
     """Specification for a pipeline module."""
     name: ModuleName
-    model: BaseModel
+    model: BaseModel | None = None
     dependencies: list[ModuleName] = field(default_factory=list)
     optional: bool = False
     condition: Optional[str] = None  # Condition for execution
@@ -54,13 +54,20 @@ class ModuleSpec:
 
 @dataclass
 class ExecutionResult:
-    """Result of module execution."""
+    """Result of module execution.
+
+    ``status`` is one of ``"SUCCESS"``, ``"FAILED"`` (a real execution error) or
+    ``"UNAVAILABLE"`` (the module cannot run: model artifact missing or a
+    required dependency unavailable). ``success`` is True only for SUCCESS.
+    """
     module: ModuleName
     success: bool
     output: Any = None
     error: Optional[str] = None
     execution_time: float = 0.0
     warnings: list[str] = field(default_factory=list)
+    status: str = "SUCCESS"
+    reason: str | None = None
 
 
 class DependencyGraph:
@@ -149,18 +156,23 @@ class PipelineOrchestrator:
         self._initialize_modules()
 
     def _initialize_modules(self):
-        """Initialize all pipeline modules with their dependencies."""
+        """Initialize all pipeline modules with their dependencies.
+
+        Every module declared in ``DEFAULT_DEPENDENCIES`` is registered in the
+        dependency graph regardless of whether its model artifact currently
+        loads. A module whose model is unavailable keeps its graph node and
+        reports an explicit ``UNAVAILABLE`` status at execution time; the model
+        attribute on the spec is ``Optional``.
+        """
         for module_name, deps in self.DEFAULT_DEPENDENCIES.items():
-            # Load model from registry
             model = self._load_module_model(module_name)
-            if model is not None:
-                spec = ModuleSpec(
-                    name=module_name,
-                    model=model,
-                    dependencies=deps,
-                    optional=module_name in [ModuleName.RI, ModuleName.RECURVATURE]
-                )
-                self.dependency_graph.add_module(spec)
+            spec = ModuleSpec(
+                name=module_name,
+                model=model,
+                dependencies=deps,
+                optional=module_name in [ModuleName.RI, ModuleName.RECURVATURE]
+            )
+            self.dependency_graph.add_module(spec)
 
     def _load_module_model(self, module_name: ModuleName) -> Optional[BaseModel]:
         """Load model for a module from registry."""
@@ -265,7 +277,7 @@ class PipelineOrchestrator:
             self.results[module_name] = result
             module_outputs[module_name] = result.output
 
-            if not result.success and not spec.optional:
+            if not result.success and not spec.optional and result.status == "FAILED":
                 raise RuntimeError(f"Required module {module_name} failed: {result.error}")
 
         # Build unified state
@@ -279,6 +291,44 @@ class PipelineOrchestrator:
         start_time = time.time()
 
         try:
+            # A module whose model artifact did not load (and that is not the
+            # model-less hazard engine) reports an explicit UNAVAILABLE status
+            # instead of vanishing from the graph or crashing the pipeline.
+            if spec.model is None and spec.name != ModuleName.HAZARD_ENGINE:
+                return ExecutionResult(
+                    module=spec.name,
+                    success=False,
+                    output=None,
+                    status="UNAVAILABLE",
+                    reason="model artifact unavailable (not loaded)",
+                    execution_time=time.time() - start_time,
+                )
+
+            # Modules whose predict() requires upstream outputs must not run
+            # (and must not be reported as successful) when those outputs are
+            # unavailable. Uses the declared DEFAULT_DEPENDENCIES edges.
+            required_upstream = {
+                ModuleName.RAINFALL: [ModuleName.TRAJECTORY, ModuleName.INTENSITY],
+                ModuleName.WIND: [ModuleName.TRAJECTORY, ModuleName.INTENSITY],
+                ModuleName.FLOOD: [ModuleName.RAINFALL, ModuleName.WIND],
+                ModuleName.LANDSLIDE: [ModuleName.RAINFALL],
+            }.get(spec.name, [])
+            for dep in required_upstream:
+                dep_result = self.results.get(dep)
+                if dep_result is None or dep_result.status != "SUCCESS":
+                    if dep_result is not None and dep_result.status == "FAILED":
+                        reason = f"dependency failed: {dep.value}"
+                    else:
+                        reason = f"dependency unavailable: {dep.value}"
+                    return ExecutionResult(
+                        module=spec.name,
+                        success=False,
+                        output=None,
+                        status="UNAVAILABLE",
+                        reason=reason,
+                        execution_time=time.time() - start_time,
+                    )
+
             # Prepare inputs based on module type
             if spec.name == ModuleName.GENESIS:
                 output = spec.model.predict(cyclone_state)
@@ -326,6 +376,32 @@ class PipelineOrchestrator:
                 raise ValueError(f"Unknown module: {spec.name}")
 
             execution_time = time.time() - start_time
+
+            # An adapter may legitimately run and return a schema object whose
+            # own status marks the prediction as unavailable (e.g. RI/intensity
+            # report UNAVAILABLE when no decision-tree artifacts were
+            # distributed). Such a module must NOT be reported as a SUCCESS —
+            # otherwise the unavailable output flows downstream and the UI
+            # renders fabricated values. LIMITED/UNVERIFIED/BASELINE outputs are
+            # real outputs (the module ran) and are NOT downgraded here.
+            unavailable_statuses = {
+                "UNAVAILABLE",
+                "DATA_UNAVAILABLE",
+                "RUNTIME_REQUIRED",
+                "NOT_IMPLEMENTED",
+                "MODEL_MISSING",
+            }
+            output_status = getattr(output, "status", None)
+            if output is not None and output_status in unavailable_statuses:
+                return ExecutionResult(
+                    module=spec.name,
+                    success=False,
+                    output=output,
+                    reason=f"adapter reports status={output_status}",
+                    status="UNAVAILABLE",
+                    execution_time=execution_time,
+                )
+
             return ExecutionResult(
                 module=spec.name,
                 success=True,
@@ -339,7 +415,8 @@ class PipelineOrchestrator:
                 module=spec.name,
                 success=False,
                 error=str(e),
-                execution_time=execution_time
+                execution_time=execution_time,
+                status="FAILED",
             )
 
     def _run_hazard_engine(self, cyclone_state: CycloneState,
@@ -363,13 +440,36 @@ class PipelineOrchestrator:
 
     def _build_unified_state(self, cyclone_state: CycloneState,
                               module_outputs: dict) -> UnifiedForecastState:
-        """Build unified forecast state from module outputs."""
+        """Build unified forecast state from module outputs.
+
+        When the hazard engine ran, its computed overall severity, confidence,
+        affected region, uncertainty summary and explanations are preserved
+        (only model versions and per-module status metadata are merged in),
+        keeping the engine's hazard combination logic authoritative instead of
+        overwriting it with the orchestrator's own summary heuristics.
+        """
         # Collect model versions
         model_versions = {}
         for module_name, result in self.results.items():
             if result.success and module_name in self.dependency_graph.modules:
                 spec = self.dependency_graph.modules[module_name]
-                model_versions[module_name.value] = spec.model.model_info.version
+                if spec.model is not None:
+                    model_versions[module_name.value] = spec.model.model_info.version
+
+        # Per-module status/reasons, preserving availability for downstream layers
+        module_status = {}
+        module_reasons = {}
+        for module_name, result in self.results.items():
+            module_status[module_name.value] = result.status
+            if result.status != "SUCCESS":
+                module_reasons[module_name.value] = result.reason or result.error or result.status
+
+        hazard_state = module_outputs.get(ModuleName.HAZARD_ENGINE)
+        if isinstance(hazard_state, UnifiedForecastState):
+            hazard_state.model_versions = model_versions
+            hazard_state.module_status = module_status
+            hazard_state.module_reasons = module_reasons
+            return hazard_state
 
         # Determine overall hazard severity
         hazard_severity = self._compute_overall_hazard(module_outputs)
@@ -386,12 +486,19 @@ class PipelineOrchestrator:
             flood=module_outputs.get(ModuleName.FLOOD),
             landslide=module_outputs.get(ModuleName.LANDSLIDE),
             model_versions=model_versions,
+            module_status=module_status,
+            module_reasons=module_reasons,
             overall_hazard_severity=hazard_severity,
             confidence=self._compute_overall_confidence(module_outputs)
         )
 
-    def _compute_overall_hazard(self, module_outputs: dict) -> RiskLevel:
-        """Compute overall hazard severity from all predictions."""
+    def _compute_overall_hazard(self, module_outputs: dict) -> RiskLevel | None:
+        """Compute overall hazard severity from all predictions.
+
+        Returns ``None`` (not assessed) — NOT ``RiskLevel.NONE`` — when no
+        module carried a usable risk level, so the UI cannot misread the
+        composite as an assessed low-risk result.
+        """
         risk_levels = []
 
         for module_name, output in module_outputs.items():
@@ -404,7 +511,7 @@ class PipelineOrchestrator:
                 risk_levels.append(output['risk_level'])
 
         if not risk_levels:
-            return RiskLevel.NONE
+            return None
 
         # Return maximum risk level
         risk_order = {
@@ -429,7 +536,8 @@ class PipelineOrchestrator:
         """Get summary of pipeline execution."""
         return {
             'modules_executed': [m.value for m, r in self.results.items() if r.success],
-            'modules_failed': [m.value for m, r in self.results.items() if not r.success],
+            'modules_failed': [m.value for m, r in self.results.items() if not r.success and r.status == "FAILED"],
+            'modules_unavailable': [m.value for m, r in self.results.items() if r.status == "UNAVAILABLE"],
             'execution_times': {m.value: r.execution_time for m, r in self.results.items()},
             'total_time': sum(r.execution_time for r in self.results.values()),
             'unified_state_available': self.unified_state is not None

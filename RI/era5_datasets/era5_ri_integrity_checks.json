@@ -1,0 +1,53 @@
+{
+  "feature": {
+    "n_features": 89,
+    "n_present": 89,
+    "all_present": true,
+    "duplicates": 0,
+    "column_order_matches_spec": true,
+    "matches_frozen_model": true
+  },
+  "temporal": {
+    "rows": 870,
+    "era5_delta_minutes_eq_0": 870,
+    "era5_delta_minutes_neq_0": 0,
+    "era5_datetime_after_obs": 0
+  },
+  "target": {
+    "ri_pos": 82,
+    "ri_neg": 788,
+    "ri_nan": 0,
+    "forbidden_predictor_in_spec": []
+  },
+  "storm": {
+    "storms": 126,
+    "storm_id_nan": 0
+  },
+  "missingness": {
+    "any_fully_missing": false,
+    "fully_missing_features": [],
+    "overall": 0.14117,
+    "by_group": {
+      "mean": {
+        "base": 0.0,
+        "derived": 0.0,
+        "temporal_delta": 0.2464
+      },
+      "min": {
+        "base": 0.0,
+        "derived": 0.0,
+        "temporal_delta": 0.1517
+      },
+      "max": {
+        "base": 0.0,
+        "derived": 0.0,
+        "temporal_delta": 0.3506
+      }
+    }
+  },
+  "leakage": {
+    "era5_only_past_or_present": true,
+    "no_target_in_predictors": true,
+    "no_binned_targets": true
+  }
+}

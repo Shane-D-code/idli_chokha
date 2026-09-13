@@ -30,7 +30,7 @@ const LAYERS: LayerGroup[] = [
     options: [
       { key: "track", label: "Historical Track", available: true },
       { key: "forecast", label: "Forecast Track", available: true },
-      { key: "uncertainty", label: "Uncertainty Cone", available: true },
+      { key: "uncertainty", label: "Uncertainty Band (uncalibrated)", available: true },
       { key: "position", label: "Current Position", available: true },
     ],
   },
@@ -39,7 +39,7 @@ const LAYERS: LayerGroup[] = [
     options: [
       { key: "rainfall", label: "Rainfall", available: false },
       { key: "wind", label: "Wind", available: false },
-      { key: "flood", label: "Flood", available: true },
+      { key: "flood", label: "Flood", available: false },
       { key: "landslide", label: "Landslide", available: false },
     ],
   },
@@ -318,8 +318,25 @@ export default function DashboardPage() {
           {/* Overall risk — compact notice */}
           <div className="cc-block cc-risk">
             <span className="cc-block-title">Overall Risk</span>
-            <span className="cc-risk-val">NOT AVAILABLE</span>
-            <span className="cc-risk-sub">{risk?.reason ?? "HazardRiskEngine is not currently operational."}</span>
+            {risk?.available && risk?.severity ? (
+              <>
+                <div className="row" style={{ gap: "var(--sp-2)", alignItems: "center" }}>
+                  <span className="cc-risk-val">{risk.severity.replace(/_/g, " ")}</span>
+                  <RiskPill severity={risk.severity} />
+                </div>
+                <span className="cc-risk-sub">
+                  {risk.score !== undefined ? `Composite score ${risk.score}/100 · ` : ""}
+                  {risk.reason ?? risk.engineName}
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="cc-risk-val">NOT AVAILABLE</span>
+                <span className="cc-risk-sub">
+                  {risk?.reason ?? "HazardRiskEngine is not currently operational."}
+                </span>
+              </>
+            )}
           </div>
         </aside>
       </div>

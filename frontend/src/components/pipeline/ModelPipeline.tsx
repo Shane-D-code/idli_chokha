@@ -41,7 +41,7 @@ const H = 600;
 const LAYOUT: Omit<GraphNode, "detail" | "statusText">[] = [
   { id: "cyclone_state", label: "CYCLONE STATE", abbrev: "STATE", x: 380, y: 46, tone: "input" },
   { id: "genesis", label: "GENESIS", x: 380, y: 126, group: ["genesis"] },
-  { id: "trajectory", label: "TRAJECTORY V12", abbrev: "TRAJECTORY", x: 120, y: 226, route: "/track" },
+  { id: "trajectory", label: "TRAJECTORY (V12 DISTILLED)", abbrev: "TRAJECTORY", x: 120, y: 226, route: "/track" },
   { id: "ri", label: "RI", x: 380, y: 226, route: "/intensity", group: ["ri"] },
   { id: "intensity", label: "INTENSITY", x: 640, y: 226, route: "/intensity" },
   { id: "recurvature", label: "RECURVATURE", x: 120, y: 322, route: "/recurvature" },
@@ -79,6 +79,9 @@ function toneOf(status: string): GraphTone {
     case "LIVE":
       return "ready";
     case "BASELINE":
+    case "AVAILABLE_BASELINE":
+    case "LIMITED":
+    case "STATIC_SUSCEPTIBILITY":
       return "degraded";
     case "DEGRADED":
     case "DATA_REQUIRED":
@@ -87,6 +90,8 @@ function toneOf(status: string): GraphTone {
       return "degraded";
     case "UNAVAILABLE":
     case "MODEL_MISSING":
+    case "DATA_UNAVAILABLE":
+    case "NOT_IMPLEMENTED":
       return "blocked";
     default:
       return "blocked";
