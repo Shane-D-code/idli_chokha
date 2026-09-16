@@ -90,7 +90,7 @@ class TestNativeModelCompatibility:
     def test_trajectory_and_ri_coexist(self, cyclone_state_with_history):
         """Trajectory (PyTorch) + RI (XGBoost+PyTorch) must load and predict."""
         traj = create_trajectory_adapter('best_cyclone_model_lt3p_distilled.pth')
-        ri = create_ri_adapter('cyclone_backup/models')
+        ri = create_ri_adapter('RI/models')
 
         traj_result = traj.predict(cyclone_state_with_history)
         ri_result = ri.predict(cyclone_state_with_history)
@@ -98,12 +98,15 @@ class TestNativeModelCompatibility:
         assert traj_result is not None
         assert ri_result is not None
         assert 0.0 <= ri_result.probability_24h <= 1.0
+        # The validated IMD branch must actually be loaded (not UNAVAILABLE)
+        assert ri_result.imd_probability is not None
+        assert ri_result.status != "UNAVAILABLE"
 
     def test_all_three_models_coexist(self, cyclone_state_with_history):
         """Trajectory + Recurvature + RI all loaded simultaneously."""
         traj = create_trajectory_adapter('best_cyclone_model_lt3p_distilled.pth')
         rec = create_recurvature_adapter('recurvature/xgb_recurve_model.json')
-        ri = create_ri_adapter('cyclone_backup/models')
+        ri = create_ri_adapter('RI/models')
 
         # All should predict without crash
         traj_result = traj.predict(cyclone_state_with_history)
@@ -115,6 +118,8 @@ class TestNativeModelCompatibility:
         assert ri_result is not None
         assert 0.0 <= rec_result.probability <= 1.0
         assert 0.0 <= ri_result.probability_24h <= 1.0
+        assert ri_result.imd_probability is not None
+        assert ri_result.status != "UNAVAILABLE"
 
     def test_recurvature_predict_proba_works(self, cyclone_state):
         """Verify recurvature adapter correctly uses XGBClassifier.predict_proba."""

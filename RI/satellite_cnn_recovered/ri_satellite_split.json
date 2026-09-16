@@ -1,0 +1,24 @@
+{
+  "seed": 42,
+  "fractions": {
+    "train": 0.7,
+    "val": 0.15,
+    "test": 0.15
+  },
+  "n_rows": 25,
+  "n_storms": 23,
+  "n_ri": 8,
+  "n_non_ri": 17,
+  "split_rows": {
+    "test": 3,
+    "train": 19,
+    "val": 3
+  },
+  "split_storms": {
+    "train": 17,
+    "val": 3,
+    "test": 3
+  },
+  "leakage_guard": "satellite_datetime <= datetime_utc + 5 min",
+  "preprocessing_version": "global_physical_fixed_window_180-310K_nan0.5_v1"
+}

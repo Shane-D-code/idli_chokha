@@ -59,11 +59,14 @@ models:
 
   ri:
     name: "ri"
-    version: "latest"
-    checkpoint: "cyclone_backup/models/imd_final_xgboost.json"
-    era5_checkpoint: "cyclone_backup/models/era5_final_xgboost.json"
-    satellite_checkpoint: "cyclone_backup/models/satellite_cnn.pt"
-    fusion_checkpoint: "cyclone_backup/models/imd_era5_final_xgboost.json"
+    version: "1"
+    checkpoint: "RI/models/imd_ri_model.json"
+    era5_checkpoint: "RI/models/era5_final_xgboost.json"
+    satellite_checkpoint: "RI/models/satellite_cnn.pt"
+    fusion_checkpoint: "RI/models/imd_era5_final_xgboost.json"
+    # Production RI model: IMD+ERA5 fusion (locked seed-42 artifact).
+    provider: "imd_era5_fusion"
+    imd_era5_fusion_checkpoint: "RI/era5_datasets/imd_era5_fusion_experiment/final_model_seed42/imd_era5_fusion_xgboost_final.json"
 
   rainfall:
     name: "rainfall"

@@ -447,6 +447,19 @@ pip install -r requirements.txt
 #    (for the satellite CNN, on a torch host e.g. Google Colab)
 pip install torch
 
+# Runtime integration (production branch, IMD+ERA5 fusion)
+# The fusion model (98 predictors = 89 ERA5 + 9 IMD, 29 trees, seed 42, locked
+# test ROC-AUC 0.737 / Brier 0.1517) is wired as the runtime RI branch:
+#   - component:  src/models/ri/fusion.py
+#   - adapter:    src/models/adapters/ri_adapter.py  (mode IMD_ERA5_FUSION,
+#                 IMD-only fallback when the 20 ERA5 base level fields are
+#                 absent at runtime; fallback is always labelled)
+#   - registry:   models/registry/registry_index.json -> ri_fusion_v1
+#   - manifest:   era5_datasets/imd_era5_fusion_experiment/final_model_seed42/
+#                 imd_era5_fusion_runtime_manifest.json
+#   - audit:      ../docs/model_audit/ri_imd_era5_fusion_runtime.md
+#   - tests:      ../tests/test_ri_fusion.py  (run: python3 -m pytest ../tests/)
+
 # 2. Run the full tabular pipeline (evaluated end-to-end on macOS)
 python run_pipeline.py
 

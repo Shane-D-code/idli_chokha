@@ -34,6 +34,22 @@ ri:
   # RI positive when the 24 h wind increase meets / exceeds this threshold (kt).
   threshold_kt: 30
   target_column: "RI_24h"
+  # ------------------------------------------------------------
+  # Production RI model provider (runtime inference).
+  #   imd_era5_fusion : fused 98-feature model (89 ERA5 + 9 IMD, 29 trees,
+  #                     seed 42). Requires ERA5 base level fields in the
+  #                     runtime CycloneState; falls back to IMD-only when ERA5
+  #                     is unavailable.
+  #   imd_only        : IMD XGBoost branch only.
+  # ------------------------------------------------------------
+  model:
+    provider: "imd_era5_fusion"
+    fusion_checkpoint: "era5_datasets/imd_era5_fusion_experiment/final_model_seed42/imd_era5_fusion_xgboost_final.json"
+    n_era5_features: 89
+    n_imd_features: 9
+    n_features: 98
+    n_trees: 29
+    random_state: 42
 
 # ------------------------------------------------------------
 # Storm-safe split settings

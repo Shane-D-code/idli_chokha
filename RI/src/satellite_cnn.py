@@ -227,6 +227,42 @@ def normalize_patch(tb: np.ndarray, mask: np.ndarray | None = None,
     return np.stack([tb_norm, mask]).astype(np.float32)
 
 
+def recovered_crops_to_kelvin(stored: np.ndarray, out_of_domain: float = 0.5,
+                              tb_min: float = LAYOUT["tb_min"],
+                              tb_max: float = LAYOUT["tb_max"],
+                              fill_tb: float = LAYOUT["fill_tb"]) -> tuple:
+    """Convert stored recovered crops back to (Kelvin, valid-mask) for the CNN.
+
+    ``satellite_recovery._global_normalization`` stores each recovered crop in
+    global-normalised units ``norm = clip((tb_max - Tb) / (tb_max - tb_min))``
+    with NaN mapped to the neutral ``out_of_domain`` bucket (default 0.5). The
+    model consumes physical Kelvin patches (see ``normalize_patch``), so the
+    storage is inverted here: ``Tb = tb_max - norm * (tb_max - tb_min)``.
+
+    The inversion is lossy only for the ``out_of_domain`` bucket: any real
+    pixel whose Tb maps exactly to the bucket value (245 K by default) is
+    indistinguishable from a filled pixel and is excluded from the validity
+    mask (mask = 0, filled with ``fill_tb``). Across the recovered set this
+    affects only the ~4% documented NaN fraction; it is a deliberate
+    conservative choice over falsely treating bucket pixels as measurements.
+
+    Accepts ``stored`` shaped (H, W), (N, H, W) or (N, H, W, 1); a single
+    sample with a channel dim should be passed as (1, H, W, 1).
+
+    Returns ``(tb_kelvin, valid_mask)`` both float32.
+    """
+    arr = np.asarray(stored, dtype=np.float32)
+    if arr.ndim == 4 and arr.shape[-1] == 1:
+        arr = arr[..., 0]
+    if arr.ndim not in (2, 3):
+        raise ValueError(f"expected (H,W), (N,H,W) or (N,H,W,1), got {arr.shape}")
+    tb = tb_max - arr * (tb_max - tb_min)
+    tb = np.clip(tb, tb_min, tb_max)
+    mask = (np.abs(arr - out_of_domain) > 3e-3).astype(np.float32)
+    tb = np.where(mask == 0.0, fill_tb, tb)
+    return tb.astype(np.float32), mask.astype(np.float32)
+
+
 # ---------------------------------------------------------------------------
 # Data loading (from recovered .npy crops, mirroring the main pipeline)
 # ---------------------------------------------------------------------------
@@ -464,9 +500,14 @@ def run_cnn_oof(metadata: pd.DataFrame, multimodal: pd.DataFrame, cfg: dict,
     lr = float(cfg["cnn"].get("learning_rate", 1e-3))
 
     groups = df["storm_id"].astype(str).to_numpy()
-    tab_raw = df[CN_TAB_FEATURES].to_numpy(dtype=float)
-    mask = ~np.isnan(X[..., 0])
-    mask = mask.astype(np.float32)
+    # Recovered .npy crops are stored in GLOBAL-normalised units [0,1] with the
+    # NaN bucket at 0.5 (satellite_recovery._global_normalization), but the
+    # model consumes physical Kelvin patches.  Invert the storage back to
+    # Kelvin + validity mask; without this, feeding stored units straight into
+    # normalize_patch produced a degenerate constant -1.0 (no-RI) input.
+    X_k, mask = recovered_crops_to_kelvin(X)
+    # Note: ``X`` (the returned contract) stays in stored-normalised units;
+    # only the training tensors are built from the inverted ``X_k``.
 
     oof = np.full(len(X), np.nan, dtype=np.float64)
     torch.manual_seed(seed)
@@ -494,9 +535,9 @@ def run_cnn_oof(metadata: pd.DataFrame, multimodal: pd.DataFrame, cfg: dict,
                         "data_range_": sc.data_range_.tolist(),
                         "scale_": sc.scale_.tolist()})
 
-        ir_tr, tab_tr = _to_tensor(X[tr_idx], mask[tr_idx],
+        ir_tr, tab_tr = _to_tensor(X_k[tr_idx], mask[tr_idx],
                                    tr_scaled[[c + "_norm" for c in CN_TAB_FEATURES]].to_numpy(float))
-        ir_va, tab_va = _to_tensor(X[va_idx], mask[va_idx],
+        ir_va, tab_va = _to_tensor(X_k[va_idx], mask[va_idx],
                                    va_scaled[[c + "_norm" for c in CN_TAB_FEATURES]].to_numpy(float))
         y_tr = torch.tensor(y[tr_idx], dtype=torch.float32)
 
@@ -687,7 +728,7 @@ def extract_embeddings(cnn_result: dict, cfg: dict) -> np.ndarray | None:
         raise ValueError(
             "extract_embeddings requires the real 11-feature training table; "
             "cannot fall back to zero-padded tabular input.")
-    ir, tab_t = _to_tensor(X, (~np.isnan(X[..., 0])).astype(np.float32), tab)
+    ir, tab_t = _to_tensor(*recovered_crops_to_kelvin(X), tab)
     with torch.no_grad():
         emb = model.forward_emb(ir, tab_t).numpy()
     return emb

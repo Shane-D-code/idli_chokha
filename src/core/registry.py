@@ -167,9 +167,18 @@ class ModelRegistry:
             return torch.load(path, map_location='cpu')
         elif path.suffix == '.json':
             import xgboost as xgb
-            model = xgb.XGBClassifier()
-            model.load_model(str(path))
-            return model
+            try:
+                model = xgb.XGBClassifier()
+                model.load_model(str(path))
+                return model
+            except (TypeError, AttributeError):
+                # xgboost>=2.1.3 + sklearn>=1.8 removed `_estimator_type` from
+                # ClassifierMixin, so XGBClassifier.load_model() can raise
+                # "`_estimator_type` undefined". Fall back to the Booster,
+                # which the self-loading model adapters use directly anyway.
+                booster = xgb.Booster()
+                booster.load_model(str(path))
+                return booster
         elif path.suffix in ['.pkl', '.joblib']:
             return joblib.load(path)
         elif path.suffix == '.keras':

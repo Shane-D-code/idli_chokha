@@ -3,19 +3,36 @@
 Wraps the RI prediction system and conforms to the standardized
 RIPrediction schema.
 
-Runtime execution uses the IMD XGBoost branch only. The ERA5 and
-IMD+ERA5 model artifacts exist, but their feature builders operate on
-~89/101 reanalysis features that cannot be reconstructed at runtime from
-the 17 CycloneState environmental fields, and the satellite CNN requires
-Colab-trained artifacts plus the fold scaler under ``results/`` (not
-present). The trained fusion meta-model artifact does not exist either.
+Runtime modes
+-------------
+* ``IMD_ERA5_FUSION`` — production path when the operational ``CycloneState``
+  carries the 20 base ERA5 level fields (``environmental_features``). The
+  fused 98-feature XGBoost model
+  (``RI/era5_datasets/imd_era5_fusion_experiment/final_model_seed42/imd_era5_fusion_xgboost_final.json``,
+  89 ERA5 + 9 IMD predictors, 29 trees, seed 42) is used. It is a locked
+  scientific artifact and is never retrained or modified here.
+* ``IMD_ONLY`` — documented fallback when ERA5 base fields are absent at
+  runtime. Uses the validated ``imd_ri_model.json`` branch. The output is
+  clearly labelled IMD-only and never presented as fused IMD+ERA5.
+* ``UNAVAILABLE`` — no IMD artifact available.
 
-The prior research (``cyclone_backup/SIH_FINAL_RI_REPORT.md``) found no
-proven additive skill from ERA5 (dPR-AUC -0.25 vs IMD) or satellite
-(N=9) data. Modes are therefore limited to ``IMD_ONLY`` and
-``UNAVAILABLE``; ERA5/satellite/fusion probabilities are never fabricated.
+ERA5 availability policy
+------------------------
+The fusion model is only run when genuine ERA5 level fields reach
+``CycloneState.environmental_features`` (the harmonized ERA5 source row).
+When ESA5 is unavailable the fallback is the IMD-only branch; the fusion
+probability is ``None`` and the mode label reflects which model ran. ERA5
+temporal-delta features that lack a prior in-storm observation are left as
+NaN (native XGBoost missing handling), never zero-filled or fabricated.
 
-RI Improvement 3: branch inference now honours each artifact's verified
+The IMD branch uses the **validated fair-arm artifact** ``imd_ri_model.json``
+(test ROC-AUC 0.5555 / PR-AUC 0.2230 / Brier 0.1926) whenever present,
+falling back to the legacy ``imd_final_xgboost.json``. The legacy artifact's
+reported metrics (PR-AUC 0.4033) are marked **CONFOUNDED** (likely
+train/test-storm overlap) in Improvement 4 and must never be quoted as
+evidence of model quality.
+
+RI Improvement 3: branch inference honours each artifact's verified
 ``best_iteration`` metadata (``iteration_range=(0, best_iteration + 1)``) so
 predictions match the frozen evaluation contract instead of averaging all
 built trees.
@@ -52,6 +69,12 @@ from src.models.base import (
     RIModel,
     ModelInfo,
     ModelMetadata,
+)
+from src.models.ri.fusion import (
+    DEFAULT_FUSION_CHECKPOINT,
+    IMDERA5FusionModel,
+    build_fusion_feature_vector,
+    has_era5_base_fields,
 )
 
 
@@ -170,10 +193,11 @@ class RISatelliteBranch:
 class RIModelAdapter(RIModel):
     """Adapter for the RI prediction system.
 
-    Only the IMD branch is runtime-callable. The other branch artifacts
-    (ERA5, combined, satellite) and the fusion meta-model are not usable at
-    runtime (see module docstring), so the honest mode is always IMD_ONLY
-    unless the IMD artifact is missing (then UNAVAILABLE).
+    The IMD branch is always runtime-callable. The IMD+ERA5 fusion model is
+    runtime-callable whenever the operational CycloneState carries the ERA5
+    base level fields; otherwise the adapter honestly falls back to IMD_ONLY.
+    The standalone ERA5 and satellite branches are not usable at runtime, so
+    their probabilities are ``None`` unless the fusion model itself ran.
     """
 
     def __init__(self, model_info: ModelInfo):
@@ -182,19 +206,29 @@ class RIModelAdapter(RIModel):
         self._era5_branch: Optional[RIBranchModel] = None
         self._imd_era5_branch: Optional[RIBranchModel] = None
         self._satellite_branch: Optional[RISatelliteBranch] = None
+        self._fusion_branch: Optional[IMDERA5FusionModel] = None
         self._is_loaded = False
         self._mode = "IMD_ONLY"
 
-    def load(self, checkpoint_path: str, **kwargs) -> None:
-        """Load all RI branch models and fusion meta-model.
+    def load(self, checkpoint_path: str, fusion_checkpoint: str | None = None,
+             **kwargs) -> None:
+        """Load all RI branch models and the IMD+ERA5 fusion model.
 
         Args:
             checkpoint_path: Base directory containing model artifacts.
+            fusion_checkpoint: Path to the locked IMD+ERA5 fusion artifact;
+                defaults to the canonical fusion checkpoint. When the path is
+                unusable the fusion branch is left unloaded (IMD-only
+                fallback remains available) and a warning is emitted.
         """
         base_path = Path(checkpoint_path)
 
-        # Load IMD branch
-        imd_path = base_path / "imd_final_xgboost.json"
+        # Load IMD branch: the validated fair-arm artifact is preferred; the
+        # legacy artifact (whose quoted metrics are confounded reference-only,
+        # see module docstring) is only a fallback.
+        imd_path = base_path / "imd_ri_model.json"
+        if not imd_path.exists():
+            imd_path = base_path / "imd_final_xgboost.json"
         if imd_path.exists():
             # Feature names from the trained model
             self._imd_features = [
@@ -222,6 +256,26 @@ class RIModelAdapter(RIModel):
             self._imd_era5_branch = RIBranchModel(str(imd_era5_path), [])
         else:
             warnings.warn(f"IMD+ERA5 branch not found at {imd_era5_path}")
+
+        # Load the locked IMD+ERA5 fusion model (89 ERA5 + 9 IMD, 29 trees).
+        # This is the production fusion artifact. It is only *invocable* when
+        # the runtime CycloneState carries the ERA5 base fields; otherwise the
+        # adapter falls back to IMD_ONLY (see _determine_mode / predict).
+        fusion_path = fusion_checkpoint or DEFAULT_FUSION_CHECKPOINT
+        try:
+            self._fusion_branch = IMDERA5FusionModel.load(fusion_path)
+        except FileNotFoundError:
+            warnings.warn(
+                f"IMD+ERA5 fusion model not found at {fusion_path}; "
+                "IMD-only fallback remains available."
+            )
+            self._fusion_branch = None
+        except (RuntimeError, ValueError) as exc:
+            warnings.warn(
+                f"IMD+ERA5 fusion model failed validation: {exc}. "
+                "IMD-only fallback remains available."
+            )
+            self._fusion_branch = None
 
         self._is_loaded = True
 
@@ -262,29 +316,43 @@ class RIModelAdapter(RIModel):
         return feature_array
 
     def _determine_mode(self, cyclone_state: CycloneState) -> str:
-        """Report the mode that is actually executable at runtime.
+        """Report the mode that is actually executable for this input.
 
-        Only the IMD branch runs. The ERA5/combined/satellite branches and the
-        fusion meta-model are not runtime-callable (feature builders and the
-        fusion artifact do not exist, see module docstring), so the mode is
-        ``IMD_ONLY`` whenever the IMD branch is loaded, else ``UNAVAILABLE``.
+        ``IMD_ERA5_FUSION`` when the fusion model is loaded and the runtime
+        CycloneState carries the 20 base ERA5 level fields; ``IMD_ONLY`` when
+        only the IMD branch can run; ``UNAVAILABLE`` otherwise.
         """
+        if (self._fusion_branch is not None
+                and self._fusion_branch.is_loaded
+                and has_era5_base_fields(cyclone_state)):
+            return "IMD_ERA5_FUSION"
         if self._imd_branch is not None:
             return "IMD_ONLY"
         return "UNAVAILABLE"
 
-    def predict(self, cyclone_state: CycloneState) -> RIPrediction:
-        """Predict RI probability from the IMD branch.
+    def predict(self, cyclone_state: CycloneState,
+                era5_history: Optional[list] = None) -> RIPrediction:
+        """Predict RI probability from the IMD branch or IMD+ERA5 fusion model.
 
-        The ERA5 and satellite branch artifacts exist but their feature
-        builders and the fusion meta-model do not (see module docstring), so
-        their probabilities are returned as ``None`` rather than fabricated.
+        The mode is decided from the input data:
+
+        * ``IMD_ERA5_FUSION``: the fused 98-feature model runs whenever the
+          storm carries the ERA5 base fields. ``era5_history`` (optional list
+          of ``(datetime, EnvironmentalFeatures)`` prior observations) enables
+          the capped-lag temporal deltas; without it those features are NaN.
+        * ``IMD_ONLY``: documented fallback (clearly labelled) when ERA5 data
+          is absent. Fusion probability stays ``None``.
+        * ``UNAVAILABLE``: no IMD artifact.
+
+        The satellite and standalone ERA5 branches remain unimplemented at
+        runtime; their probabilities are ``None`` (never fabricated).
 
         Args:
-            cyclone_state: Current cyclone state with IMD features.
+            cyclone_state: Current cyclone state.
+            era5_history: Optional prior in-storm ERA5 observations.
 
         Returns:
-            RIPrediction with IMD probability; no ERA5/satellite/fusion fields.
+            RIPrediction describing which model ran.
         """
         if not self._is_loaded:
             raise RuntimeError("Model not loaded. Call load() first.")
@@ -307,22 +375,40 @@ class RIModelAdapter(RIModel):
                 explanation="No RI branches available (missing model artifacts or input data)"
             )
 
-        # IMD branch (the only branch this adapter can honestly invoke)
+        # IMD branch (always available in IMD_ONLY / IMD_ERA5_FUSION modes)
         imd_prob = None
         if self._imd_branch:
             X_imd = self._build_imd_features(cyclone_state)
             imd_prob = float(self._imd_branch.predict_proba(X_imd)[0])
 
-        final_prob = imd_prob if imd_prob is not None else 0.0
+        # IMD+ERA5 fusion branch (only when ERA5 data is present)
+        fusion_prob = None
+        if mode == "IMD_ERA5_FUSION":
+            fused = build_fusion_feature_vector(
+                cyclone_state, era5_history=era5_history
+            )
+            fusion_prob = float(
+                self._fusion_branch.predict_proba(fused.vector)[0]
+            )
+
+        final_prob = fusion_prob if fusion_prob is not None else (
+            imd_prob if imd_prob is not None else 0.0
+        )
 
         # Risk level
         risk_level = self._prob_to_risk_level(final_prob)
 
-        # Confidence: based on the IMD branch alone (no other branch runs)
-        confidence = 0.55 if imd_prob is not None else 0.0
+        # Confidence: fusion combines two data sources; IMD branch alone is
+        # more limited.
+        if fusion_prob is not None:
+            confidence = 0.7
+        elif imd_prob is not None:
+            confidence = 0.55
+        else:
+            confidence = 0.0
 
         # Explanation
-        explanation = self._generate_explanation(imd_prob)
+        explanation = self._generate_explanation(imd_prob, fusion_prob)
 
         return RIPrediction(
             probability_24h=final_prob,
@@ -330,8 +416,8 @@ class RIModelAdapter(RIModel):
             imd_probability=imd_prob,
             era5_probability=None,
             satellite_probability=None,
-            fusion_probability=None,
-            calibrated_probability=imd_prob,
+            fusion_probability=fusion_prob,
+            calibrated_probability=fusion_prob if fusion_prob is not None else imd_prob,
             confidence=confidence,
             model_version=self.model_info.version,
             timestamp=datetime.utcnow(),
@@ -350,13 +436,26 @@ class RIModelAdapter(RIModel):
         else:
             return RiskLevel.EXTREME
 
-    def _generate_explanation(self, imd_p: float) -> str:
+    def _generate_explanation(self, imd_p: float | None,
+                              fusion_p: float | None = None) -> str:
         parts = [f"Mode: {self._mode}"]
+        if fusion_p is not None:
+            parts.append(
+                f"IMD+ERA5 fusion (imd_era5_fusion_xgboost_final.json, "
+                f"98 features / 29 trees): {fusion_p:.2f}"
+            )
         if imd_p is not None:
-            parts.append(f"IMD: {imd_p:.2f}")
-        parts.append("ERA5 UNUSED: runtime cannot reconstruct its 89 features and it showed no proven additive skill (dPR-AUC -0.25 vs IMD)")
+            art = "imd_ri_model.json" if (
+                self._imd_branch and self._imd_branch.model_path.endswith("imd_ri_model.json")
+            ) else "imd_final_xgboost.json"
+            parts.append(f"IMD ({art}): {imd_p:.2f}")
+        if self._mode == "IMD_ONLY":
+            parts.append(
+                "ERA5 UNUSED: runtime CycloneState carries no ERA5 base level "
+                "fields; IMD-only fallback used (never labelled as fused)."
+            )
+        parts.append("Standalone ERA5 UNUSED: runtime cannot reconstruct its 89 features from CycloneState")
         parts.append("Satellite UNUSED: requires Colab CNN artifacts + fold scaler; no proven skill (N=9)")
-        parts.append("Fusion UNUSED: no trained fusion meta-model artifact exists")
         return "; ".join(parts)
 
     def predict_with_uncertainty(self, cyclone_state: CycloneState) -> tuple[RIPrediction, dict]:
@@ -375,28 +474,34 @@ class RIModelAdapter(RIModel):
     def explain(self, input_data: CycloneState, prediction: RIPrediction) -> dict:
         """Generate explanation for RI prediction."""
         return {
-            "method": "imd_branch_probability",
-            "model_type": "XGBoost (IMD branch)",
+            "method": ("imd_era5_fusion_probability" if prediction.fusion_probability is not None
+                       else "imd_branch_probability"),
+            "model_type": ("XGBoost (IMD+ERA5 fusion)" if prediction.fusion_probability is not None
+                           else "XGBoost (IMD branch)"),
             "mode": self._mode,
             "branch_predictions": {
                 "imd": prediction.imd_probability,
                 "era5": None,
                 "satellite": None,
-                "fusion": None,
+                "fusion": prediction.fusion_probability,
             },
-            "note": "Only the IMD branch runs; ERA5/satellite/fusion are unavailable at runtime (see _generate_explanation).",
+            "note": ("IMD+ERA5 fusion ran (98 features) when ERA5 base fields were present; "
+                     "otherwise IMD-only fallback was used and clearly labelled."),
         }
 
 
 def create_ri_adapter(
-    checkpoint_path: str = "cyclone_backup/models",
-    model_version: str = "v1"
+    checkpoint_path: str = "RI/models",
+    model_version: str = "v1",
+    fusion_checkpoint: str | None = None,
 ) -> RIModelAdapter:
     """Factory function to create and load an RI adapter.
 
     Args:
         checkpoint_path: Path to the directory containing RI model artifacts.
         model_version: Version string for the model.
+        fusion_checkpoint: Optional path to the IMD+ERA5 fusion artifact
+            (defaults to the canonical fusion checkpoint).
 
     Returns:
         Loaded RIModelAdapter instance.
@@ -410,7 +515,7 @@ def create_ri_adapter(
     )
 
     adapter = RIModelAdapter(model_info)
-    adapter.load(checkpoint_path)
+    adapter.load(checkpoint_path, fusion_checkpoint=fusion_checkpoint)
     return adapter
 
 

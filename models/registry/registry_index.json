@@ -20,5 +20,93 @@
       "scaler_path": "scalers.pkl"
     },
     "file_hash": "b9cfc710aa55881dabc4149ebbdd6ac57f814bb93a5118c22b9e41209d57765b"
+  },
+  "ri_v1": {
+    "name": "ri",
+    "version": "1",
+    "model_type": "ri",
+    "training_dataset": "RI improvement-4 common train split (IMD BoB best-track), 82 storms / 587 rows; fresh fair-arm IMD branch",
+    "feature_version": "v1 (12 IMD features: lat, lon, wind/pressure + 6/12/24h deltas)",
+    "training_period": [
+      "1982-05-01",
+      "2026-01-10"
+    ],
+    "validation_metrics": {
+      "val_f1": 0.1379,
+      "val_threshold": 0.01,
+      "val_rows": 106,
+      "val_ri_pos": 4
+    },
+    "test_metrics": {
+      "n": 177,
+      "storms": 25,
+      "ri_pos": 25,
+      "prevalence": 0.14124,
+      "roc_auc": 0.5555,
+      "pr_auc": 0.223,
+      "brier": 0.192635
+    },
+    "preprocessing_version": "v1",
+    "checkpoint_path": "RI/models/imd_ri_model.json",
+    "calibration_artifact": null,
+    "timestamp": "2026-09-13T07:47:51.344754",
+    "git_commit": "f2808a15114f",
+    "configuration": {
+      "branch": "IMD (runtime IMD_ONLY)",
+      "verified_best_iteration": 220,
+      "legacy_imd_final_xgboost_confounded": "reference-only; PR-AUC 0.4033 marked CONFOUNDED by improvement 4",
+      "provenance": "docs/model_audit/ri_improvement_4_record_imd_era5_comparison.md; RI/models/imd_era5_comparison_metadata.json"
+    },
+    "file_hash": "eed639b2d002455aa5c8af87a9b1a4111778530d9adf5b463db3845ae692cd1e"
+  },
+  "ri_fusion_v1": {
+    "name": "ri_fusion",
+    "version": "seed42-final",
+    "model_type": "ri",
+    "training_dataset": "IMD+ERA5 fusion (1,086-row common universe, controlled storm-split seed 42); IMD best-track + rebuilt 89-feature ERA5",
+    "feature_version": "v98 (89 ERA5 + 9 IMD)",
+    "training_period": [
+      "1982-05-01",
+      "2026-01-10"
+    ],
+    "validation_metrics": {
+      "tuning_rows": 0,
+      "controlled_cv_seed42": "imd_era5_fusion_controlled_cv_seed42.csv"
+    },
+    "test_metrics": {
+      "n": 233,
+      "storms": 26,
+      "ri_pos": 24,
+      "prevalence": 0.10300429184549356,
+      "roc_auc": 0.7373405103668261,
+      "pr_auc": 0.2364104288862846,
+      "brier": 0.15165848032132215,
+      "dpr_auc": null,
+      "threshold": 0.54
+    },
+    "preprocessing_version": "v1",
+    "checkpoint_path": "RI/era5_datasets/imd_era5_fusion_experiment/final_model_seed42/imd_era5_fusion_xgboost_final.json",
+    "calibration_artifact": null,
+    "timestamp": "2026-09-16T00:00:00.000000",
+    "git_commit": null,
+    "configuration": {
+      "branch": "IMD+ERA5 fusion (89 ERA5 + 9 IMD predictors, 29 trees)",
+      "random_state": 42,
+      "max_depth": 5,
+      "min_child_weight": 2,
+      "learning_rate": 0.05,
+      "subsample": 0.85,
+      "colsample_bytree": 0.85,
+      "max_delta_step": 1,
+      "scale_pos_weight": 6.825688073394495,
+      "objective": "binary:logistic",
+      "tree_method": "hist",
+      "era5_feature_spec": "RI/era5_ri_feature_spec_89.json",
+      "locked_test_metrics": "RI/era5_datasets/imd_era5_fusion_experiment/final_model_seed42/imd_era5_fusion_locked_test_metrics.csv",
+      "locked_test_predictions": "RI/era5_datasets/imd_era5_fusion_experiment/final_model_seed42/imd_era5_fusion_locked_test_predictions.csv",
+      "runtime_manifest": "RI/era5_datasets/imd_era5_fusion_experiment/final_model_seed42/imd_era5_fusion_runtime_manifest.json",
+      "provenance": "RI/era5_datasets/imd_era5_fusion_experiment/ (locked artifacts; docs/model_audit/ri_imd_era5_fusion_runtime.md)"
+    },
+    "file_hash": "dfdb75adb4be284599a40c7e21b887a156795b827313b629207197f2c32bda20"
   }
 }
