@@ -171,7 +171,7 @@ class CycloneForecaster(nn.Module):
         intensity = self.intensity_head(horizon_embeddings)
 
         uncertainty = torch.clamp(
-            uncertainty, min=-5, max=5
+            uncertainty, min=-8, max=8
         )
 
         return {

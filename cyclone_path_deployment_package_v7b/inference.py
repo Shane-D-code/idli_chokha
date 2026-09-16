@@ -32,7 +32,7 @@ from model import CycloneForecaster
 class CycloneInference:
     def __init__(
         self,
-        checkpoint_path: str = "best_cyclone_model_lt3p_distilled.pth",
+        checkpoint_path: str = "best_cyclone_model_lt3p_distilled_finetuned.pth",
         scaler_path: str = "scalers.pkl",
         device: str | None = None,
     ):
@@ -146,7 +146,7 @@ _predictor = None
 
 def predict(
     observations: Iterable[Dict[str, Any]],
-    checkpoint_path: str = "best_cyclone_model_lt3p_distilled.pth",
+    checkpoint_path: str = "best_cyclone_model_lt3p_distilled_finetuned.pth",
     scaler_path: str = "scalers.pkl",
 ) -> Dict[str, Any]:
     global _predictor
