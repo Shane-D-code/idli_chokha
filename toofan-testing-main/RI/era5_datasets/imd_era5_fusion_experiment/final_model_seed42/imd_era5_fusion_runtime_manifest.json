@@ -1,0 +1,52 @@
+{
+  "manifest_version": "1.0",
+  "model": "IMD+ERA5 XGBoost Rapid Intensification (runtime fusion model)",
+  "model_name": "imd_era5_fusion",
+  "model_version": "seed42-final",
+  "runtime": "TOOFAN RI adapter (src.models.adapters.ri_adapter / src.models.ri.fusion)",
+  "features": 98,
+  "era5_features": 89,
+  "imd_features": 9,
+  "trees": 29,
+  "random_state": 42,
+  "objective": "binary:logistic",
+  "hyperparameters": {
+    "max_depth": 5,
+    "min_child_weight": 2,
+    "learning_rate": 0.05,
+    "subsample": 0.85,
+    "colsample_bytree": 0.85,
+    "max_delta_step": 1,
+    "scale_pos_weight": 6.825688073394495,
+    "tree_method": "hist"
+  },
+  "artifact": "RI/era5_datasets/imd_era5_fusion_experiment/final_model_seed42/imd_era5_fusion_xgboost_final.json",
+  "feature_contract": "RI/era5_ri_feature_spec_89.json",
+  "training_data": "RI/era5_datasets/imd_era5_fusion_experiment/imd_era5_fusion_1086_final.csv",
+  "locked_test_metrics": {
+    "file": "RI/era5_datasets/imd_era5_fusion_experiment/final_model_seed42/imd_era5_fusion_locked_test_metrics.csv",
+    "n": 233,
+    "storms": 26,
+    "roc_auc": 0.7373405103668261,
+    "pr_auc": 0.2364104288862846,
+    "brier": 0.15165848032132215
+  },
+  "inference_flow": [
+    "CycloneState input",
+    "build_imd_fusion_features: 9 IMD predictors (wind_minus_Lh_kt == wind(t-L); delta_v_minus_Lh_kt == wind(t)-wind(t-L))",
+    "build_era5_static_features: 38 static ERA5 predictors from environmental_features base fields",
+    "build_era5_temporal_features: 51 capped-lag temporal deltas when in-storm ERA5 history available, else NaN",
+    "98-feature vector in booster.feature_names order (validated at load)",
+    "XGBoost Booster.predict -> P(RI=1)",
+    "RIPrediction (mode, probabilities, risk, confidence)"
+  ],
+  "missing_data_policy": {
+    "imd": "NaN preserved for missing trend fields; XGBoost native missing handling",
+    "era5_temporal": "NaN when no prior in-storm ERA5 observation within the capped lag; never zero-filled",
+    "no_fabrication": "if ERA5 base fields absent at runtime, fusion is NOT run; the adapter falls back to IMD-only and labels it as such"
+  },
+  "fallback_policy": {
+    "imd_era5_fusion_available": "use IMD+ERA5 fusion",
+    "era5_unavailable": "use documented IMD-only fallback, clearly labelled; fusion_probability=None"
+  }
+}

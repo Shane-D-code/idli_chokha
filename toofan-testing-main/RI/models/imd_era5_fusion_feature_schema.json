@@ -1,0 +1,415 @@
+{
+  "n_features": 101,
+  "n_imd": 12,
+  "n_era5": 89,
+  "unique_names": true,
+  "imd_era5_name_overlap": [],
+  "features": [
+    {
+      "name": "latitude",
+      "source": "imd"
+    },
+    {
+      "name": "longitude",
+      "source": "imd"
+    },
+    {
+      "name": "max_wind_kt",
+      "source": "imd"
+    },
+    {
+      "name": "central_pressure_hpa",
+      "source": "imd"
+    },
+    {
+      "name": "pressure_drop_hpa",
+      "source": "imd"
+    },
+    {
+      "name": "wind_6h_change",
+      "source": "imd"
+    },
+    {
+      "name": "wind_minus_6h_kt",
+      "source": "imd"
+    },
+    {
+      "name": "delta_v_minus_6h_kt",
+      "source": "imd"
+    },
+    {
+      "name": "wind_minus_12h_kt",
+      "source": "imd"
+    },
+    {
+      "name": "delta_v_minus_12h_kt",
+      "source": "imd"
+    },
+    {
+      "name": "wind_minus_24h_kt",
+      "source": "imd"
+    },
+    {
+      "name": "delta_v_minus_24h_kt",
+      "source": "imd"
+    },
+    {
+      "name": "d_850",
+      "source": "era5"
+    },
+    {
+      "name": "d_700",
+      "source": "era5"
+    },
+    {
+      "name": "d_500",
+      "source": "era5"
+    },
+    {
+      "name": "d_200",
+      "source": "era5"
+    },
+    {
+      "name": "r_850",
+      "source": "era5"
+    },
+    {
+      "name": "r_700",
+      "source": "era5"
+    },
+    {
+      "name": "r_500",
+      "source": "era5"
+    },
+    {
+      "name": "r_200",
+      "source": "era5"
+    },
+    {
+      "name": "t_850",
+      "source": "era5"
+    },
+    {
+      "name": "t_700",
+      "source": "era5"
+    },
+    {
+      "name": "t_500",
+      "source": "era5"
+    },
+    {
+      "name": "t_200",
+      "source": "era5"
+    },
+    {
+      "name": "u_850",
+      "source": "era5"
+    },
+    {
+      "name": "u_700",
+      "source": "era5"
+    },
+    {
+      "name": "u_500",
+      "source": "era5"
+    },
+    {
+      "name": "u_200",
+      "source": "era5"
+    },
+    {
+      "name": "v_850",
+      "source": "era5"
+    },
+    {
+      "name": "v_700",
+      "source": "era5"
+    },
+    {
+      "name": "v_500",
+      "source": "era5"
+    },
+    {
+      "name": "v_200",
+      "source": "era5"
+    },
+    {
+      "name": "shear_850_200",
+      "source": "era5"
+    },
+    {
+      "name": "rh_mean_850_500",
+      "source": "era5"
+    },
+    {
+      "name": "wind_mag_850",
+      "source": "era5"
+    },
+    {
+      "name": "wind_mag_700",
+      "source": "era5"
+    },
+    {
+      "name": "wind_mag_500",
+      "source": "era5"
+    },
+    {
+      "name": "wind_mag_200",
+      "source": "era5"
+    },
+    {
+      "name": "divergence_contrast_200_850",
+      "source": "era5"
+    },
+    {
+      "name": "u_shear_850_200",
+      "source": "era5"
+    },
+    {
+      "name": "v_shear_850_200",
+      "source": "era5"
+    },
+    {
+      "name": "shear_direction_deg",
+      "source": "era5"
+    },
+    {
+      "name": "r_850_minus_500",
+      "source": "era5"
+    },
+    {
+      "name": "r_850_minus_700",
+      "source": "era5"
+    },
+    {
+      "name": "r_700_minus_500",
+      "source": "era5"
+    },
+    {
+      "name": "t_850_minus_500",
+      "source": "era5"
+    },
+    {
+      "name": "t_850_minus_700",
+      "source": "era5"
+    },
+    {
+      "name": "t_700_minus_500",
+      "source": "era5"
+    },
+    {
+      "name": "divergence_contrast_500_850",
+      "source": "era5"
+    },
+    {
+      "name": "divergence_contrast_200_500",
+      "source": "era5"
+    },
+    {
+      "name": "delta_6h_rh_mean_850_500",
+      "source": "era5"
+    },
+    {
+      "name": "delta_6h_wind_mag_850",
+      "source": "era5"
+    },
+    {
+      "name": "delta_6h_wind_mag_700",
+      "source": "era5"
+    },
+    {
+      "name": "delta_6h_wind_mag_500",
+      "source": "era5"
+    },
+    {
+      "name": "delta_6h_wind_mag_200",
+      "source": "era5"
+    },
+    {
+      "name": "delta_6h_divergence_contrast_200_850",
+      "source": "era5"
+    },
+    {
+      "name": "delta_6h_u_shear_850_200",
+      "source": "era5"
+    },
+    {
+      "name": "delta_6h_v_shear_850_200",
+      "source": "era5"
+    },
+    {
+      "name": "delta_6h_shear_direction_deg",
+      "source": "era5"
+    },
+    {
+      "name": "delta_6h_r_850_minus_500",
+      "source": "era5"
+    },
+    {
+      "name": "delta_6h_r_850_minus_700",
+      "source": "era5"
+    },
+    {
+      "name": "delta_6h_r_700_minus_500",
+      "source": "era5"
+    },
+    {
+      "name": "delta_6h_t_850_minus_500",
+      "source": "era5"
+    },
+    {
+      "name": "delta_6h_t_850_minus_700",
+      "source": "era5"
+    },
+    {
+      "name": "delta_6h_t_700_minus_500",
+      "source": "era5"
+    },
+    {
+      "name": "delta_6h_divergence_contrast_500_850",
+      "source": "era5"
+    },
+    {
+      "name": "delta_6h_divergence_contrast_200_500",
+      "source": "era5"
+    },
+    {
+      "name": "delta_12h_rh_mean_850_500",
+      "source": "era5"
+    },
+    {
+      "name": "delta_12h_wind_mag_850",
+      "source": "era5"
+    },
+    {
+      "name": "delta_12h_wind_mag_700",
+      "source": "era5"
+    },
+    {
+      "name": "delta_12h_wind_mag_500",
+      "source": "era5"
+    },
+    {
+      "name": "delta_12h_wind_mag_200",
+      "source": "era5"
+    },
+    {
+      "name": "delta_12h_divergence_contrast_200_850",
+      "source": "era5"
+    },
+    {
+      "name": "delta_12h_u_shear_850_200",
+      "source": "era5"
+    },
+    {
+      "name": "delta_12h_v_shear_850_200",
+      "source": "era5"
+    },
+    {
+      "name": "delta_12h_shear_direction_deg",
+      "source": "era5"
+    },
+    {
+      "name": "delta_12h_r_850_minus_500",
+      "source": "era5"
+    },
+    {
+      "name": "delta_12h_r_850_minus_700",
+      "source": "era5"
+    },
+    {
+      "name": "delta_12h_r_700_minus_500",
+      "source": "era5"
+    },
+    {
+      "name": "delta_12h_t_850_minus_500",
+      "source": "era5"
+    },
+    {
+      "name": "delta_12h_t_850_minus_700",
+      "source": "era5"
+    },
+    {
+      "name": "delta_12h_t_700_minus_500",
+      "source": "era5"
+    },
+    {
+      "name": "delta_12h_divergence_contrast_500_850",
+      "source": "era5"
+    },
+    {
+      "name": "delta_12h_divergence_contrast_200_500",
+      "source": "era5"
+    },
+    {
+      "name": "delta_24h_rh_mean_850_500",
+      "source": "era5"
+    },
+    {
+      "name": "delta_24h_wind_mag_850",
+      "source": "era5"
+    },
+    {
+      "name": "delta_24h_wind_mag_700",
+      "source": "era5"
+    },
+    {
+      "name": "delta_24h_wind_mag_500",
+      "source": "era5"
+    },
+    {
+      "name": "delta_24h_wind_mag_200",
+      "source": "era5"
+    },
+    {
+      "name": "delta_24h_divergence_contrast_200_850",
+      "source": "era5"
+    },
+    {
+      "name": "delta_24h_u_shear_850_200",
+      "source": "era5"
+    },
+    {
+      "name": "delta_24h_v_shear_850_200",
+      "source": "era5"
+    },
+    {
+      "name": "delta_24h_shear_direction_deg",
+      "source": "era5"
+    },
+    {
+      "name": "delta_24h_r_850_minus_500",
+      "source": "era5"
+    },
+    {
+      "name": "delta_24h_r_850_minus_700",
+      "source": "era5"
+    },
+    {
+      "name": "delta_24h_r_700_minus_500",
+      "source": "era5"
+    },
+    {
+      "name": "delta_24h_t_850_minus_500",
+      "source": "era5"
+    },
+    {
+      "name": "delta_24h_t_850_minus_700",
+      "source": "era5"
+    },
+    {
+      "name": "delta_24h_t_700_minus_500",
+      "source": "era5"
+    },
+    {
+      "name": "delta_24h_divergence_contrast_500_850",
+      "source": "era5"
+    },
+    {
+      "name": "delta_24h_divergence_contrast_200_500",
+      "source": "era5"
+    }
+  ],
+  "order_contract": true,
+  "note": "Fusion vector = 12 canonical IMD predictors followed by the 89-feature ERA5 contract. Native missing-value handling."
+}

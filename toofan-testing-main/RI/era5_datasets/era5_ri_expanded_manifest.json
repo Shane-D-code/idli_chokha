@@ -1,0 +1,85 @@
+{
+  "dataset_generation_version": "ri-improvement-5-expansion-v1",
+  "purpose": "RI Improvement 5 \u2014 honest real-dataset expansion (data only, no training)",
+  "status": "audited real-data expansion. Every master-track observation that lies inside a raw-ERA5 tile at an exact valid time is already present in the frozen dataset, so the honest expansion delta is 0 rows / 0 storms. The remaining candidate storms (252, incl. ARB/LAND basins) are blocked on raw ERA5 not being present for their observation times and no CDS credentials being available; blocked = reported, not fabricated. The artifact is a frozen copy that documents the blocker.",
+  "generated_at": "2026-09-13T06:07:35.613930+00:00",
+  "python": "3.13.2",
+  "seed_note": "no RNG used (deterministic transform only)",
+  "code_version": "ri-improvement-5-expansion-v1",
+  "options": {
+    "current": "era5_ri_rebuilt.csv",
+    "master_track": "IMD_master_best_track_1982_2026.csv",
+    "ri_labels": "IMD_RI_dataset_1982_2025.csv",
+    "era5_directory": "ERA5_expanded",
+    "frozen_model": "era5_final_xgboost.json",
+    "spec": "era5_ri_feature_spec_89.json"
+  },
+  "sources": {
+    "best_track_source": "IMD master best track (real; IMD_master_best_track_1982_2026.csv)",
+    "era5_source": "CDS-format reanalysis-era5-pressure-levels NetCDF (real raw files in ERA5_expanded/)",
+    "n_netcdf_files_present": 20,
+    "n_exact_valid_times": 22,
+    "grid_resolution_deg": 0.25,
+    "spatial_interpolation": "bilinear_storm_center",
+    "time_alignment": "exact valid_time match; era5_delta_minutes must be 0",
+    "ri_definition": "RI = increase in maximum sustained wind >= 30 kt over the following 24 h"
+  },
+  "candidate_universe": {
+    "n_raw_files": 20,
+    "exact_valid_times": 22,
+    "master_obs_at_exact_times": 23,
+    "storms_at_exact_times": 20,
+    "inside_tile_spatial_match": 22,
+    "inside_tile_storms": 19,
+    "already_in_current": 22,
+    "new_candidates": 0,
+    "new_candidates_censored": 0,
+    "new_candidates_usable": 0,
+    "new_candidates_usable_ri_pos": 0
+  },
+  "added": {
+    "rows": 0,
+    "note": "rows whose (storm_id, datetime_utc) identity is absent from the frozen dataset"
+  },
+  "blocked": {
+    "cds_api_credentials": "absent \u2014 raw ERA5 downloads for 1982-2026 blocked",
+    "candidate_storms_total": 299,
+    "candidate_storms_with_valid_ri_labels": 252,
+    "candidate_ri_pos_storms": 35,
+    "candidate_ri_pos_obs": 184,
+    "note": "candidate storms with genuine RI labels have NO raw ERA5 for their observation times; not fabricated"
+  },
+  "stats": {
+    "build_seconds": 0.76,
+    "rows": 870,
+    "storms": 126,
+    "ri_pos": 82,
+    "ri_neg": 788,
+    "date_range": [
+      "1982-05-01 03:00:00",
+      "2025-11-25 03:00:00"
+    ]
+  },
+  "contract": {
+    "n_features": 89,
+    "matches_frozen_model": true
+  },
+  "provenance": {
+    "extracted_from_raw": {
+      "rows": 22,
+      "storms": 19,
+      "ri_pos": 6,
+      "ri_neg": 16
+    },
+    "carried_historical": {
+      "rows": 848,
+      "storms": 107,
+      "ri_pos": 76,
+      "ri_neg": 772
+    }
+  },
+  "leakage": {
+    "no_future_era5": true,
+    "test_set_unaffected": "frozen 870 rows byte-identical; the Improvement-4 25-storm test set is a subset of the frozen dataset and is untouched"
+  }
+}
