@@ -39,13 +39,16 @@ export default function RainfallPage() {
   return (
     <div className="page">
       <div className="page-head">
-        <div className="page-kicker">Hazard</div>
+        <div className="page-kicker">Forecast · Hazard</div>
         <h1 className="page-title">Rainfall</h1>
-        <p className="page-sub">Cyclone precipitation — simulated accumulation for demo (same-time baseline classifier).</p>
+        <p className="page-sub">Cyclone precipitation — expected accumulation by region.</p>
         <div className="row" style={{ marginTop: "var(--sp-3)" }}>
           {data?.status ? <StatusLabel status={data.status.status} /> : null}
           <DemoBanner />
         </div>
+        {data?.status && (data.status.status === "NOT_AVAILABLE" || data.status.status === "ERROR") && data.status.message ? (
+          <p className="small muted" style={{ marginTop: "var(--sp-2)" }}>Reason: {data.status.message}</p>
+        ) : null}
       </div>
 
       {data?.isBaseline || data?.status.status === "BASELINE" ? (
@@ -74,7 +77,7 @@ export default function RainfallPage() {
       </div>
 
       {/* ═══ ACCUMULATION WINDOWS ═══ */}
-      {data?.accumulations && data.accumulations.length ? (
+            {data?.accumulations && data.accumulations.length ? (
         <>
           <SectionLabel label="Accumulation Windows" strong />
           <div className="hazard-strip" style={{ marginTop: "var(--sp-2)", marginBottom: "var(--section-gap)" }}>
@@ -97,6 +100,13 @@ export default function RainfallPage() {
           </div>
         </>
       ) : null}
+        {(!data || data.status.status === "NOT_AVAILABLE" || data.status.status === "ERROR") && !loading ? (
+          <div className="panel">
+            <div className="panel-body">
+              <p className="small muted">Rain data unavailable from backend.{data?.status?.message ? ` Reason: ${data.status.message}` : ""}</p>
+            </div>
+          </div>
+        ) : null}
 
       {/* ═══ DISTRICT RANKING + MODEL INFO ═══ */}
       <div className="hero-grid" style={{ gridTemplateColumns: "1fr 360px" }}>

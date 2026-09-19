@@ -194,6 +194,9 @@ export default function RecurvaturePage() {
           {report ? <StatusBadge status={report.status.status} /> : null}
           <DemoBanner />
         </div>
+        {report?.status && (report.status.status === "NOT_AVAILABLE" || report.status.status === "ERROR") && report.status.message ? (
+          <p className="small muted" style={{ marginTop: "var(--sp-2)" }}>Reason: {report.status.message}</p>
+        ) : null}
       </div>
 
       {/* ═══ HERO: MAP + ANALYSIS ═══ */}
@@ -396,7 +399,7 @@ function AssessmentAvailable({ probability, risk, report }: { probability: numbe
       ) : null}
       <div className="row" style={{ justifyContent: "space-between", marginTop: "var(--sp-2)" }}>
         <span className="lbl">Model Status</span>
-        <StatusBadge status={report?.status.status ?? "UNAVAILABLE"} />
+        <StatusBadge status={report?.status.status ?? "AVAILABLE"} />
       </div>
     </div>
   );

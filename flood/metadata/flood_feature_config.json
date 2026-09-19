@@ -1,0 +1,105 @@
+{
+  "model_name": "Toofan Flood XGBoost Improved",
+  "model_type": "Spatial flood susceptibility + dynamic rainfall hazard",
+  "target": "flood_label",
+  "features": [
+    "rainfall_mm_hr",
+    "rainfall_lag_30min",
+    "rainfall_lag_60min",
+    "rainfall_lag_90min",
+    "rainfall_lag_2hr",
+    "rainfall_change_30min",
+    "rainfall_rolling_1hr",
+    "rainfall_rolling_3hr",
+    "rainfall_rolling_6hr",
+    "spatial_mean_rainfall",
+    "spatial_max_rainfall",
+    "spatial_rainfall_std",
+    "rainfall_to_regional_max",
+    "regional_rainfall_1hr",
+    "regional_rainfall_3hr",
+    "regional_rainfall_6hr",
+    "distance_to_water_m",
+    "distance_to_river_m",
+    "distance_to_lake_m",
+    "distance_to_reservoir_m",
+    "distance_to_inundation_area_m",
+    "near_river_1km",
+    "near_river_3km",
+    "near_water_1km",
+    "near_water_3km",
+    "near_inundation_3km",
+    "waterbody_count_5km",
+    "river_segment_count_5km"
+  ],
+  "n_features": 28,
+  "rainfall_features": [
+    "rainfall_mm_hr",
+    "rainfall_rolling_1hr",
+    "rainfall_rolling_3hr",
+    "rainfall_rolling_6hr",
+    "regional_rainfall_1hr",
+    "regional_rainfall_3hr",
+    "regional_rainfall_6hr"
+  ],
+  "hydrological_features": [
+    "distance_to_water_m",
+    "distance_to_river_m",
+    "distance_to_lake_m",
+    "distance_to_reservoir_m",
+    "distance_to_inundation_area_m",
+    "near_river_1km",
+    "near_river_3km",
+    "near_water_1km",
+    "near_water_3km",
+    "near_inundation_3km",
+    "waterbody_count_5km",
+    "river_segment_count_5km"
+  ],
+  "dynamic_risk": {
+    "susceptibility_weight": 0.6,
+    "rainfall_hazard_weight": 0.4,
+    "formula": "0.60*flood_susceptibility + 0.40*rainfall_hazard",
+    "risk_thresholds": {
+      "Low": 0.25,
+      "Moderate": 0.5,
+      "High": 0.75
+    }
+  },
+  "rainfall_normalization": {
+    "rainfall_mm_hr": {
+      "q05": 0.0,
+      "q95": 7.5899997
+    },
+    "rainfall_rolling_1hr": {
+      "q05": 0.0,
+      "q95": 14.961499850000015
+    },
+    "rainfall_rolling_3hr": {
+      "q05": 0.0,
+      "q95": 41.972999250000036
+    },
+    "rainfall_rolling_6hr": {
+      "q05": 0.0,
+      "q95": 79.96299713140003
+    },
+    "regional_rainfall_1hr": {
+      "q05": 0.0156417109491969,
+      "q95": 9.230213765614971
+    },
+    "regional_rainfall_3hr": {
+      "q05": 0.0424331545320855,
+      "q95": 27.12056107037968
+    },
+    "regional_rainfall_6hr": {
+      "q05": 0.0424331545320855,
+      "q95": 51.41949111539305
+    }
+  },
+  "risk_labels": {
+    "Low": "risk < 0.25",
+    "Moderate": "0.25 <= risk < 0.50",
+    "High": "0.50 <= risk < 0.75",
+    "Very High": "risk >= 0.75"
+  }
+}

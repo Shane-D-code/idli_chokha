@@ -5,10 +5,10 @@
 data:
   ibtracs_path: "wind/ibtracs.NI.list.v04r01.csv"
   imd_path: "cyclone intensity/data/raw/IMD_best_track.xlsx"
-  era5_dir: "cyclone_backup/ERA5_expanded"
-  era5_extracted_features: "cyclone_backup/models/RI_ERA5_features_MVP.csv"
-  satellite_dir: "cyclone_backup/satellite_cnn_recovered/images"
-  satellite_metadata: "cyclone_backup/satellite_cnn_recovered/metadata_clean.csv"
+  era5_dir: "RI/ERA5_expanded"
+  era5_extracted_features: "RI/models/RI_ERA5_features_MVP.csv"
+  satellite_dir: "RI/satellite_cnn_recovered/images"
+  satellite_metadata: "RI/satellite_cnn_recovered/metadata_clean.csv"
   imerg_dir: "rain/data"
   dem_path: "flood/data/dem.tif"
   dem_derived_dir: "flood/data/derived"
@@ -72,6 +72,9 @@ models:
     name: "rainfall"
     version: "baseline"
     checkpoint: "rain/model/rainfall_classifier_12.pkl"
+    # Two-stage Extreme-Rainfall-Aware Random Forest (metadata:
+    # rain/metadata/rainfall_model_12_metadata.json).
+    regressor_checkpoint: "rain/model/rainfall_regressor_12.pkl"
 
   wind:
     name: "wind"
@@ -80,8 +83,11 @@ models:
 
   flood:
     name: "flood"
-    version: "baseline"
-    checkpoint: "flood/model/flood_xgboost_spatial_holdout.pkl"
+    version: "improved"
+    checkpoint: "flood/model/flood_xgboost_improved.pkl"
+    feature_config: "flood/metadata/flood_feature_config.json"
+    model_metadata: "flood/metadata/flood_model_metadata.json"
+    inference_module: "flood/inference.py"
 
   landslide:
     name: "landslide"

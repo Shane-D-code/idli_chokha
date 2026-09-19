@@ -34,7 +34,7 @@ artifact at all.
 | RI | `AVAILABLE` IMD-only — real XGB branch; confidence fixed heuristic 0.55 |
 | Recurvature | FAILED on minimal state (real model refuses incomplete input); real prediction when track history supplied |
 | Rainfall | `AVAILABLE_BASELINE` — same-time classifier, not a forecast |
-| Wind | `UNAVAILABLE` — TensorFlow import hard-aborts in current env |
+| Wind | `BASELINE` in standard DAG; grid-fed **real inference verified** via `predict_grids` (isolated subprocess; no U10/V10 provider in repo) |
 | Flood | `DATA_UNAVAILABLE` — static spatial classifier needs grids/hydro preprocessing |
 | Landslide | `STATIC_SUSCEPTIBILITY` — no ML artifact |
 | Hazard engine | SUCCESS — returns honest `None` severity when nothing assessed |
@@ -85,9 +85,9 @@ Legend: ✅ verified/present · ◐ partial · 🔶 recorded-but-not-reproduced 
 | **Intensity** | 24h MSW (kt) regression (+ IMD category) | ❌ dataset absent (`clean_model_data.csv` 486 obs/30 storms claimed historically; IMD `.xlsx` path missing) | ❌ artifact absent (`cyclone intensity/models/final_xgb_regressor.joblib`) | 🔶 MAE 14.55 / RMSE 19.66 / R² 0.037 / exact 45.3% / within-1 84.0% — HISTORICAL | `UNAVAILABLE` (no artifact) | **UNAVAILABLE** | No trained artifact, no dataset; reproducible retrain recipe exists (`cyclone intensity/retrain.py`); no uncertainty (point regressor) |
 | **RI** | P(Rapid Intensification at 24h), binary | ✅ IMD RI base (2 CKs; 5,009/291/179 BoB), multimodal table 3,211 rows; 🔶 ERA5 848 obs features CSV; ⚠️ satellite 25 rows/23 storms/8 RI; TCIR dataset absent | ✅ IMD XGB (real, tracked, runnable) · ✅ ERA5 XGB (89-feat, loads) · ✅ satellite CNN `.pt` (loads state dict; fold-0 scaler ABSENT, Kelvin↔[0,1] mismatch) · ❌ fusion meta-model ABSENT | 🔶 IMD-only PR-AUC 0.594 > IMD+ERA5 0.341 (20-storm set) — historical; 🔶 sat OOF PR-AUC 0.516 (9 obs); 🔶 TCIR PR-AUC 0.092 — all UNVERIFIED | ✅ IMD-only branch; `calibrated_probability` = alias of `imd_probability` (NO isotonic calibration applied) | **LIMITED (IMD-only)** | ERA5 runtime reconstruction not wired; satellite inference not runnable in-repo; no fusion meta-model exists; confidence fixed heuristic 0.55 |
 | **Recurvature** | P(heading change ≥ 45° within 24h), binary | ⚠️ IBTrACS NIO; split 276/60/60 storms (10,069/1,982/2,085 rows) — training CSVs GITIGNORED/absent | ⚠️ `xgb_recurve_model.json` (GITIGNORED, present locally); ✅ `scaler.joblib` (tracked) | ✅ **REPRODUCED in-repo**: ROC-AUC 0.7218, PR-AUC 0.5218, F1 0.4941, Brier 0.2052 (from `test_predictions.csv`, 2,085 rows) | ✅ real XGB predictions with track history; refuses incomplete state → orchestrator FAILED | **AVAILABLE (trained, real) — NOT reproducible from fresh checkout** | Calibration weak; DIST2LAND/dir_change inputs are placeholders when history absent; limited inference without history/env; artifact + eval outputs untracked |
-| **Rainfall** | Same-time heavy/light classification (≥ 10 mm/hr), per-cell | ✅ FANI 2019 IMERG (336,000 rows × 4 cols; 12 half-hour × 28,000 cells) | ✅ `rainfall_classifier_12.pkl` (bare RF, 25 feats, tracked, loads) | ✅ **REPRODUCED**: P 0.9197 / R 0.9785 / F1 0.9482 / MAE 0.0785 (temporal holdout = last 4/12 snapshots, 112,000 rows) | `AVAILABLE_BASELINE` — same-time; no future product (grids None, conf 0.0) | **BASELINE ONLY** | NOT a future rainfall forecast; cross-split autocorrelation leakage (optimistic); training-count discrepancy (56k rows unaccounted); FANI-only; two-stage regressor absent |
-| **Wind** | U10/V10 wind-field grid (Keras ConvLSTM2D enc-dec), horizon undocumented | ⚠️ IBTrACS 4 cyclones + case PNGs; NO gridded U10/V10 source saved | ✅ `wind/model/wind_model_best.keras` (tracked) — **NOT loadable** (TF import SIGABRT) | ❌ no metrics | `UNAVAILABLE` (TF-health subprocess probe, no fabricated output) | **BASELINE / CASE STUDY (Yaas 2021)** | TF runtime issue; no inference pipeline; no scaler object (norm txt only); single case study; horizon undocumented |
-| **Flood** | Static per-cell flood-extent classification, FANI 2019 | ✅ 374 cells × 97 timestamps; 28 feats (16 rainfall current+past + 12 static hydrology); ❌ label leak: per-cell constants post-event back-propagated; 2 label schemes disagree (70 vs 3 flooded) | ✅ `flood_xgboost_spatial_holdout.pkl` (raw XGB, 28 feats, tracked, loads) | 🔶 ROC-AUC 0.8025 (rain) / 0.9635 (rain+hydro) — HISTORICAL; holdout split not in repo; "temporal validation" not a temporal holdout | `DATA_UNAVAILABLE` (needs grids/hydro preprocessing); errors on minimal state → FAILED | **STATIC SPATIAL CLASSIFIER — SINGLE EVENT** | NOT a flood forecast; whole-event label leakage documented; no temporal generalization; runtime preprocessing not wired |
+| **Rainfall** | Same-time heavy/light classification (≥ 10 mm/hr), per-cell | ✅ FANI 2019 IMERG (336,000 rows × 4 cols; 12 half-hour × 28,000 cells) | ✅ `rainfall_classifier_12.pkl` (bare RF, 25 feats, tracked, loads) + `rainfall_regressor_12.pkl` (RF, 25 feats; now shipped at `rain/model/`) | ✅ **REPRODUCED**: P 0.9197 / R 0.9785 / F1 0.9482 / MAE 0.0785 (temporal holdout = last 4/12 snapshots, 112,000 rows) | `AVAILABLE_BASELINE` — same-time; no future product (grids None, conf 0.0) | **BASELINE ONLY** | NOT a future rainfall forecast; cross-split autocorrelation leakage (optimistic); training-count discrepancy (56k rows unaccounted); FANI-only |
+| **Wind** | U10/V10 wind-field grid (Keras ConvLSTM2D enc-dec), horizon undocumented | ⚠️ IBTrACS 4 cyclones + case PNGs; no gridded U10/V10 source in repo | ✅ `wind/model/wind_model_best.keras` (tracked); **loads after TF-health probe**; registered `wind_vbaseline`; orchestrator discovers it | ❌ no metrics | ✅ grid-fed **real inference verified** (`predict_grids`, isolated subprocess); `BASELINE` in standard DAG (no U10/V10 provider) | **PARTIAL** (CASE STUDY Yaas 2021 — model/adapter/registry/inference VERIFIED) | no input geometry; no scaler object (norm txt only); single case study; horizon undocumented; no production input provider |
+| **Flood** | Static per-cell flood-extent classification, FANI 2019 | ✅ 374 cells × 97 timestamps; 28 feats (16 rainfall current+past + 12 static hydrology); ❌ label leak: per-cell constants post-event back-propagated; 2 label schemes disagree (70 vs 3 flooded) | ✅ `flood_xgboost_improved.pkl` (raw XGB, 28 feats, tracked, loads) — **supersedes** `flood_xgboost_spatial_holdout.pkl` | ✅ **REPRODUCED**: temporal-validation ROC-AUC 0.9946 / PR-AUC 0.9749 / P 0.9552 / R 0.9143 / F1 0.9343 (`flood/metadata/flood_model_metadata.json`, ≈ last-25%-timestamps); spatial-holdout ROC-AUC 0.9649 / PR-AUC 0.8480 | `DATA_UNAVAILABLE` (needs grids/hydro preprocessing); errors on minimal state → FAILED | **STATIC SPATIAL CLASSIFIER — SINGLE EVENT** | NOT a flood forecast; whole-event label leakage documented; runtime preprocessing not wired; deployment inference class available at `flood/inference.py` |
 | **Landslide** | Static susceptibility hazard maps | ⚠️ rainfall rasters + terrain; NO labeled landslide inventory | ❌ no ML artifact (adapter `checkpoint_path=""`) | ❌ none possible | `STATIC_SUSCEPTIBILITY` | **STATIC ONLY** | No model, no inference, no validation |
 
 ---
@@ -126,10 +126,10 @@ with Section 4. Do not use as a baseline without re-establishing it.
 | RI (IMD-only) | PR-AUC 0.594 > IMD+ERA5 0.341 (20 storms / 25 RI common test set) | RI report docs | strict common set construction not in repo |
 | RI (satellite CNN) | OOF PR-AUC 0.516 (9 obs) | `cyclone_backup/README.md` §9d | OOF CSV absent; inference blockers (fold-0 scaler, unit mismatch) |
 | RI (TCIR CNN) | PR-AUC 0.0917 / ROC 0.5782 (N=928 / 19 storms / 69 RI); dataset 2,840/64/189 | `cyclone_backup/README.md`, `SIH_FINAL_RI_REPORT.md` | TCIR dataset + results absent; artifact normalisation stats pathologically inf/nan |
-| Flood | ROC-AUC 0.8025 (rain-only) / 0.9635 (rain+hydro) | `flood/metadata/flood_spatial_holdout_metadata.json` | exact 94-cell spatial holdout split not in repo; metrics reproduced from neither label scheme |
+| Flood | ROC-AUC 0.9635 / PR-AUC 0.8480 (rain+hydro, spatial holdout) | `flood/metadata/flood_model_metadata.json` | superseded 1st-gen claim; improved model's spatial-holdout ROC-AUC reproducible (0.9649), temporal-validation ROC-AUC 0.9946 reproduced (≈ last-25% timestamps); exact 94-cell holdout split still not in repo |
 | Flood | near-100% "temporal validation" | `flood_xgboost_temporal_validation_predictions.csv` | file uses training-period timestamps + all cells + per-cell-constant labels — not a valid holdout |
 | Genesis | 300-sample balanced dataset (150/150, 191 storms, 2015–2024) + any CV/test metrics | external source report | training data, script, metrics not in repo |
-| Rainfall | two-stage regressor half of the "rainfall model" | upstream metadata | regressor artifact absent (`rain/model/rainfall_regressor_12.pkl` gitignored, non-existent) |
+| Rainfall | two-stage regressor half of the "rainfall model" | upstream metadata | regressor artifact now SHIPS at `rain/model/rainfall_regressor_12.pkl` (gitignored, present locally; load + contract verified — full metric reproduction requires the absent feature-builder script) |
 | Wind | (none claimed) | — | no numeric metrics anywhere for wind |
 
 ---
@@ -182,8 +182,7 @@ with Section 4. Do not use as a baseline without re-establishing it.
 - Same-time classification, NOT a future rainfall forecast.
 
 ### Wind
-- Non-runnable case study (Yaas); TensorFlow runtime issue in current env; no
-  valid operational pipeline; horizon undocumented.
+- Case-study (Yaas) wind field model; model load / adapter / registry discovery / grid-fed inference now **VERIFIED** (`predict_grids` runs `model.predict` in an isolated subprocess; TF-before-pandas import order inside the worker avoids the macOS arm64 pandas-after-TF predict deadlock). No gridded U10/V10 provider ships in the repo, no valid operational pipeline, horizon still undocumented.
 
 ### Flood
 - Static/single-event spatial classifier; NOT a future flood forecast.
@@ -252,9 +251,9 @@ Full inventory performed (paths, formats, sizes, git status). Summary:
 | Intensity | `final_xgb_regressor.joblib` | joblib | ❌ absent | ❌ | ❌ requires retrain w/ real dataset |
 | RI-IMD | `imd_final_xgboost.json` (+ ERA5/combined XGB, sat `.pt`, TCIR bundle) | XGB JSON / PyTorch / Keras | ✅ all present | ✅ tracked | ✅ artifacts ship; satellite inference blocked by ABSENT `cyclone_backup/results/cnn_tabular_scaler.json` |
 | Recurvature | `xgb_recurve_model.json` | XGB JSON | ✅ | ❌ **GITIGNORED** (`.gitignore:14`) | ❌ NOT reproducible; training CSVs gitignored/absent; in-repo eval CSV untracked |
-| Rainfall | `rainfall_classifier_12.pkl` | joblib (RF) | ✅ | ✅ tracked | ✅ yes (metrics verticality reproducible from result CSVs) |
-| Wind | `wind_model_best.keras` | Keras | ✅ | ✅ tracked | ✅ file ships, but NOT loadable (TF SIGABRT) |
-| Flood | `flood_xgboost_spatial_holdout.pkl` | joblib (XGB) | ✅ | ✅ tracked | ✅ file ships; metrics + holdout split NOT reproducible |
+| Rainfall | `rainfall_classifier_12.pkl` (+ `rainfall_regressor_12.pkl`) | joblib (RF) | ✅ | ✅ classifier tracked; regressor gitignored but ships locally | ✅ yes (metrics verticality reproducible from result CSVs) |
+| Wind | `wind_model_best.keras` | Keras | ✅ | ✅ tracked | ✅ file ships; loads after TF-health probe; grid-fed inference verified (isolated worker) |
+| Flood | `flood_xgboost_improved.pkl` | joblib (XGB) | ✅ | ✅ tracked | ✅ file ships; temporal metrics REPRODUCIBLE (see §4); exact spatial-holdout split absent |
 | Landslide | none | — | — | — | n/a |
 
 ### Git-tracking facts
@@ -279,7 +278,8 @@ Full inventory performed (paths, formats, sizes, git status). Summary:
    `cyclone intensity/retrain.py`.
 3. **Recover the satellite fold-0 scaler** (`results/cnn_tabular_scaler.json`)
    to make `satellite_cnn.pt` inferable.
-4. **Provide a working TensorFlow runtime + input geometry** for wind.
+4. **Provide a documented input geometry (and a legitimate gridded U10/V10
+   provider)** for wind — TF runtime + grid-fed inference themselves now work.
 
 Per Phase 12 rules, large artifacts were NOT committed just to make the report
 look complete; the gaps above are documented instead.
@@ -317,7 +317,7 @@ new uncertainty is built.
 | Recurvature | current reproduced baseline (0.722/0.522) and uncalibrated Brier | ROC-AUC, PR-AUC, F1, calibration, baseline comparison |
 | Genesis | prevalence baseline (5.6% BoB) and median-imputed prototype | PR-AUC, ROC-AUC, recall, false-positive rate, calibration, prevalence baseline |
 | Rainfall (future task) | persistence of current rainfall; same-time baseline | to be defined only after the future-cast task is specified |
-| Wind | persistence of wind field | to be defined (requires runnable pipeline + documented horizon first) |
+| Wind | persistence of wind field | to be defined (requires documented horizon + input provider; grid-fed inference itself runs) |
 | Flood | static spatial baseline; dynamic task must fix label leak first | to be defined after task redefinition |
 | Landslide | none yet (no model) | task definition required first |
 
@@ -334,11 +334,15 @@ new uncertainty is built.
 3. **Intensity**: artifact + dataset absent; ECMWF CDS credentials needed for ERA5.
 4. **Satellite**: fold-0 scaler absent; Kelvin↔[0,1] unit mismatch; MERG-IR
    download needs external NOMADS; TCIR dataset absent; TF environment broken.
-5. **Wind**: TensorFlow import SIGABRT; no input geometry documented; no pipeline.
+5. **Wind**: no input geometry documented; no gridded U10/V10 provider in repo;
+   grid-fed inference itself runs (isolated TF worker).
 6. **Flood labels**: whole-event label leak + disagreeing label schemes (70 vs 3)
    must be resolved before a dynamic flood product.
 7. **Genesis data**: no training dataset in repo; synthetic env features.
-8. **TensorFlow ecosystem** entirely non-runnable in the current environment.
+8. **TensorFlow ecosystem**: in-process `model.predict()` can deadlock if pandas
+   was imported first (macOS arm64) — wind inference is therefore executed in an
+   isolated subprocess that imports TF before numpy/pandas and never imports
+   pandas.
 
 ---
 

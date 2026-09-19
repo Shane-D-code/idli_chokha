@@ -1,0 +1,67 @@
+{
+  "project": "Toofan",
+  "component": "Flood",
+  "event": "Cyclone Fani 2019",
+  "model": "XGBoost Improved",
+  "dataset_rows": 36278,
+  "dataset_columns": 33,
+  "metrics": {
+    "spatial_holdout": {
+      "roc_auc": 0.9649122807017544,
+      "pr_auc": 0.8480087734189903,
+      "precision": 0.8,
+      "recall": 0.6666666666666666,
+      "f1": 0.7272727272727273
+    },
+    "temporal_validation": {
+      "roc_auc": 0.9945958646616542,
+      "pr_auc": 0.9749369995118677,
+      "precision": 0.9552238805970149,
+      "recall": 0.9142857142857143,
+      "f1": 0.9343065693430657
+    }
+  },
+  "n_features": 28,
+  "feature_importance_top": [
+    {
+      "feature": "near_water_3km",
+      "importance": 0.4797082245349884
+    },
+    {
+      "feature": "near_river_3km",
+      "importance": 0.19393888115882874
+    },
+    {
+      "feature": "distance_to_water_m",
+      "importance": 0.16196833550930023
+    },
+    {
+      "feature": "near_water_1km",
+      "importance": 0.03598780557513237
+    },
+    {
+      "feature": "distance_to_river_m",
+      "importance": 0.029449844732880592
+    },
+    {
+      "feature": "river_segment_count_5km",
+      "importance": 0.021335385739803314
+    },
+    {
+      "feature": "distance_to_lake_m",
+      "importance": 0.020892677828669548
+    },
+    {
+      "feature": "distance_to_reservoir_m",
+      "importance": 0.019264621660113335
+    },
+    {
+      "feature": "waterbody_count_5km",
+      "importance": 0.01847046986222267
+    },
+    {
+      "feature": "distance_to_inundation_area_m",
+      "importance": 0.015474938787519932
+    }
+  ]
+}

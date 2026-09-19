@@ -1,0 +1,162 @@
+@import "tailwindcss";
+
+/* ============================================================
+   TOOFAN Ops Dashboard — Tailwind v4 + shadcn/ui theme
+   ------------------------------------------------------------
+   Ocean canvas: #06131f (bg)  |  #0d3044 (card)  |  #1b4058 (border)
+   Accent cyan: #35cfe3       |  Sky blue: #4ea8ff
+   Sea green:  #54d6a0  |  Watch: #f0b429  |  Warning: #e8b25a
+   Danger: #ee8131     |  Critical: #d9303c
+   ============================================================ */
+
+:root {
+  --background: #fdf6f0;
+  --foreground: #0f172a;
+  --card: #fff8f0;
+  --card-foreground: #111827;
+  --popover: #fff8f0;
+  --popover-foreground: #111827;
+  --primary: #35cfe3;
+  --primary-foreground: #0f172a;
+  --secondary: #f7ead8;
+  --secondary-foreground: #334155;
+  --muted: #f5e6c8;
+  --muted-foreground: #64748b;
+  --accent: #4ea8ff;
+  --accent-foreground: #f0f7ff;
+  --destructive: #e5533c;
+  --destructive-foreground: #fff6f4;
+  --warning: #f0b429;
+  --success: #54d6a0;
+  --border: #f0ddd0;
+  --input: #f0ddd0;
+  --ring: #35cfe3;
+  --radius: 0.6rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-warning: var(--warning);
+  --color-success: var(--success);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ok-matte: #d8bfa8;
+  --color-ok-matte-text: #6b4228;
+  --color-warn-matte: #f0d8a8;
+  --color-warn-matte-text: #6b3e12;
+  --color-bad-matte: #e8b8a0;
+  --color-bad-matte-text: #6b3524;
+  --color-info-matte: #d8c0b0;
+  --color-info-matte-text: #5a3e2a;
+  --color-accent-matte: #e2d0b0;
+  --color-accent-matte-text: #5a3e2a;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --font-sans: "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* ------------------------------------------------------------
+   Ops-wide utilities
+   ------------------------------------------------------------ */
+
+/* Status pill — colored dot + label on soft translucent matte tint */
+.ops-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  background: rgba(168, 213, 192, 0.15);
+  color: var(--ok-matte-text, #14532d);
+}
+
+.ops-pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--ok-matte, #7fb398);
+  position: relative;
+  flex-shrink: 0;
+}
+.ops-pill-dot::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  animation: ops-pulse 2s ease-out infinite;
+  opacity: 0;
+}
+.ops-pill-dot.on {
+  box-shadow: 0 0 5px rgba(127, 179, 152, 0.28);
+}
+
+@keyframes ops-pulse {
+  0% { transform: scale(0.6); opacity: 0.8; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+
+/* kbd shortcut hint (e.g. ⌘K) */
+.ops-kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 6px;
+  border: 1px solid #1b4058;
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: #0a2435;
+  color: #7e97ae;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.4;
+  letter-spacing: 0.03em;
+}
+
+/* Numeric badge — rounded-full, small padding, tinted bg at ~15% + tinted text */
+.ops-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+/* Globe hero balance: hide decorative scrollbars inside hero */
+.ops-globe canvas {
+  display: block;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ops-pill-dot::after { animation: none; }
+}

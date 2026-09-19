@@ -10,13 +10,13 @@ This document catalogs all existing models, datasets, training scripts, and arti
 
 | Field | Details |
 |-------|---------|
-| **Module** | `cyclone_path_deployment_package/` (inference); legacy `cyclone_path/` (V12 CLI, referenced by `v12_common.py`) |
+| **Module** | `cyclone_path_deployment_package/` with source fallback to `cyclone_path_deployment_package_v7b/` (inference); legacy `cyclone_path/` (V12 CLI, referenced by `v12_common.py`) |
 | **Model** | `CycloneTransformerV11` (V12 checkpoint) — Transformer encoder + direct per-horizon heads with identifiable bounded scale correction (0.80–1.20) |
 | **Inputs** | 13 features × 12 timesteps: `lat`, `lon`, `wind`, `mslp`, `rmw`, `sst`, `shear`, `speed_kmh`, `dt_hours`, `bearing_sin`, `bearing_cos`, `month_sin`, `month_cos` (built from raw best-track fixes) |
 | **Outputs** | Forecast positions at +2, +4, +6, ..., +24h (12 horizons); each with `cal_lat`, `cal_lon`, `raw_lat`, `raw_lon`, `learned_scale`, `sigma_km` (pending Phase 5 corrections applied to adapter: see `docs/model_audit/model_health_check.md`) |
 | **Dataset** | IBTrACS North Indian Ocean (`ibtracs.NI.list.v04r01.csv` ~28 MB in `wind/`); training used storm-wise splits (train/val/test by storm ID) |
-| **Training Script** | V12 training was done externally; the deployed artifact `best_cyclone_model_lt3p_distilled.pth` is a distilled LT3P checkpoint, loaded by `cyclone_path_deployment_package/` (`v12_common.load_v12` equivalent in the deployment package) |
-| **Inference Script** | `cyclone_path_deployment_package/` (api.py/inference.py/feature_builder.py) and `src/models/adapters/trajectory_adapter.py`; legacy `v12_predict_new.py` equivalent is packaged in the deployment package |
+| **Training Script** | V12 training was done externally; the deployed artifact `best_cyclone_model_lt3p_distilled.pth` is a distilled LT3P checkpoint, loaded by `src/models/adapters/trajectory_adapter.py` through the deployment package. The adapter tries `cyclone_path_deployment_package/` first and falls back to `cyclone_path_deployment_package_v7b/` when the root package has no source files. |
+| **Inference Script** | `cyclone_path_deployment_package_v7b/` (api.py/inference.py/feature_builder.py) via `src/models/adapters/trajectory_adapter.py`; legacy `v12_predict_new.py` equivalent is packaged in the deployment package |
 | **Model Artifact** | `best_cyclone_model_lt3p_distilled.pth` (repo root, ~2 MB) + `scalers.pkl` (repo root) — the deployed checkpoint actually used by `trajectory_adapter.py`; the legacy `cyclone_path/checkpoints/v12_best_model.pt` path no longer exists in this repository |
 | **Status** | **LIMITED / UNVERIFIED** — real inference works (point forecasts loaded + executed via the deployment package), but (1) the uncertainty head is **saturated at ~209.9 km** (log-variance +5 clamp) — *not* a linear/scale-per-horizon spread, *not* calibrated, *not* growing with lead time; (2) point-forecast skill is not re-verified in-repo (see model_health_check); (3) the 12-point synthetic input-history path is unresolved (Phase 5) |
 | **Metrics** | **HISTORICAL CLAIM — NOT REPRODUCED FROM CURRENT REPOSITORY**: median 24h error ~50–80 km on historical test storms. **Uncertainty (sigma_km) is NOT verified and does NOT grow with lead time** (saturation bounded) |
@@ -86,13 +86,13 @@ This document catalogs all existing models, datasets, training scripts, and arti
 | Field | Details |
 |-------|---------|
 | **Module** | `rain/` |
-| **Model** | Random Forest **binary classifier** (`rainfall_classifier_12.pkl`, bare `RandomForestClassifier`, 25 features — NOT a Pipeline) — labels heavy rain (≥ 10 mm/hr) vs light from IMERG + cyclone features at the **same timestamp**; the documented "two-stage" regressor half is **absent** from the repo |
+| **Model** | Random Forest **binary classifier** (`rainfall_classifier_12.pkl`, bare `RandomForestClassifier`, 25 features — NOT a Pipeline) — labels heavy rain (≥ 10 mm/hr) vs light from IMERG + cyclone features at the **same timestamp**; the documented "two-stage" regressor half ships as `rain/model/rainfall_regressor_12.pkl` (RandomForestRegressor, 25 features) |
 | **Inputs** | IMERG rainfall grids + cyclone best-track (FANI 2019 case study); consolidated tracks for 5 IMD cyclones |
 | **Outputs** | Heavy/light rainfall labels at time t (same-time), predicted for the FANI 2019 case-study window |
 | **Dataset** | `FANI_2019_IMERG_20190430_0000_0600.csv` (12.6 MB), `consolidated_cyclone_tracks_5_IMD.csv`, `FANI_2019_best_track.csv` |
 | **Training Script** | Not found in repo (model appears pre-trained) |
 | **Inference Script** | Not found |
-| **Model Artifact** | `model/rainfall_classifier_12.pkl` |
+| **Model Artifact** | `model/rainfall_classifier_12.pkl` (+ `model/rainfall_regressor_12.pkl` — two-stage) |
 | **Results** | `results/model12_results.csv` (7.1 MB) |
 | **Status** | **BASELINE ONLY** — verified **same-time classifier** (label at the same timestamp as features; largest lead is a rainfall lag of 60 min). **NOT a future rainfall forecasting model.** Split = temporal holdout (last 4 of 12 half-hourly FANI snapshots), NOT spatial. Feature-engineering code absent → target-derived lag/rolling features (10 of 25) unverifiable |
 | **Metrics** | `rain/metadata/rainfall_model_12_metadata.json` metrics (P 0.9197 / R 0.9785 / F1 0.9482, MAE 0.0785) **reproduce from `results/model12_results.csv`** — but only for FANI 2019, same-storm same-day, with autoregressive features crossing the 30-min train/test boundary (optimistic) |
@@ -113,9 +113,9 @@ This document catalogs all existing models, datasets, training scripts, and arti
 | **Training Script** | Not found in repo |
 | **Inference Script** | Not found |
 | **Model Artifact** | `model/wind_model_best.keras`, `wind_model.keras`; preprocessing = `wind_normalization.txt` only (no scaler object) |
-| **Runtime note (Phase 10)** | The `.keras` artifact **cannot be loaded in the current environment**: `import tensorflow` hard-aborts the interpreter (SIGABRT, libc++ mutex failure). The adapter probes TF import health in a subprocess and returns explicit `UNAVAILABLE` with no fabricated output. **Not runnable until a working TF runtime is provided and an inference pipeline (data recipe + scaler + horizon definition) exists.** |
+| **Runtime note (Wind integration)** | The `.keras` artifact **loads after the TF import-health probe**; real grid-fed inference is implemented and verified via `predict_grids()` in an **isolated subprocess** (on macOS arm64 in-process `model.predict` can deadlock if pandas was imported first — the worker never imports pandas and imports TF before anything else; the subprocess also contains any TF hard-abort). Registered as `wind_vbaseline` and discovered by `PipelineOrchestrator`. **No gridded U10/V10 provider ships in this repo; the standard DAG still returns honest `BASELINE` (no fabricated fields).** |
 | **Results** | `results/yaas_predicted_wind.png`, `results/yaas_actual_wind.png`, `results/yaas_wind_error.png` |
-| **Status** | **BASELINE / CASE STUDY** — single case study (Yaas); architecture/training not documented; no inference pipeline; overheated "future wind" claim in schema corrected (Phase 10). Orchestrator returns UNAVAILABLE (not registered) |
+| **Status** | **PARTIAL** — case study (Yaas 2021); model load / adapter / registry discovery / grid-fed inference are **VERIFIED**; pipeline wind output not wired (no U10/V10 provider); architecture/training undocumented; horizon undocumented |
 | **Metrics** | Visual comparison only (error map); no numeric evaluation |
 | **Dependencies** | TensorFlow/Keras |
 
@@ -126,16 +126,16 @@ This document catalogs all existing models, datasets, training scripts, and arti
 | Field | Details |
 |-------|---------|
 | **Module** | `flood/` |
-| **Model** | XGBoost **static spatial flood-extent classifier** (`flood_xgboost_spatial_holdout.pkl` ~510 KB, 28 raw features) — NOT a forecast, NOT a validated risk model |
+| **Model** | XGBoost improved flood-extent classifier (`flood_xgboost_improved.pkl` ~1.3 MB, 28 raw features), integrated from the flood deployment package. **Supersedes** the historical `flood_xgboost_spatial_holdout.pkl`. NOT a forecast, but carries REPRODUCIBLE temporal-validation metrics (see Status/Metrics) |
 | **Inputs** | 16 IMERG rainfall features (current + past lags only) + 12 static hydrology features (distance to water/river/lake/reservoir/inundation area, proximity counts). **No terrain/DEM/land-cover/soil features exist in the repo**, despite earlier docs claiming them |
 | **Outputs** | Probability grid, risk map (static spatial surface) |
 | **Dataset** | FANI 2019 flood event; IMERG rainfall; EMSR357 AOI01 extracted data (Copernicus post-event "Delineation" layer, dated 2019-05-05). **LABEL NOTE:** labels are per-cell constant across all 97 timestamps — the post-event satellite map is propagated back to pre-storm times (whole-event label leak); two inconsistent label schemes exist in-repo (3-cell L1 vs 70-cell L2; results match L2, metrics match neither) |
 | **Training Script** | Not found in repo |
-| **Inference Script** | Not found; demo outputs were produced with **zero-filled rainfall/terrain features** (reproduces 374/374 demo cell probabilities) — fabricated inputs outside the repo code |
-| **Model Artifact** | `model/flood_xgboost_spatial_holdout.pkl` |
-| **Results** | `results/fani_flood_demo_output.csv` (3.5 MB), `results/fani_flood_risk_map.png`, `results/fani_flood_demo_summary.json` |
-| **Status** | **BASELINE / CASE STUDY** — single event (FANI); spatial-holdout metrics **UNVERIFIED / HISTORICAL CLAIM — NOT REPRODUCED FROM CURRENT REPOSITORY** (claimed ROC-AUC 0.9635 / PR-AUC 0.814; the exact 94-cell holdout split is not in the repo, so cannot be reproduced). "Temporal validation" file uses training-period timestamps + all 374 cells with per-cell-constant labels showing ~100% accuracy — **not a valid temporal holdout** |
-| **Metrics** | Not reproducible from repo (see Status) |
+| **Inference Script** | `flood/inference.py` (`ToofanFloodModel`) provides susceptibility + rainfall-hazard dynamic-risk inference; demo outputs in `results/` |
+| **Model Artifact** | `model/flood_xgboost_improved.pkl`; feature config + metadata in `flood/metadata/flood_feature_config.json`, `flood/metadata/flood_model_metadata.json` |
+| **Results** | `results/fani_flood_demo_output.csv` (3.5 MB), `results/fani_flood_risk_map.png`, `results/fani_flood_demo_summary.json`, plus deployment outputs `results/toofan_flood_output.csv`, `results/fani_dynamic_flood_risk.csv`, `results/fani_dynamic_flood_risk_map.png`, `results/fani_dynamic_flood_temporal_summary.csv` |
+| **Status** | **BASELINE / CASE STUDY** — FANI 2019; verified reproducible. Spatial-holdout ROC-AUC 0.9649 / PR-AUC 0.8480 and temporal-validation ROC-AUC 0.9946 / PR-AUC 0.9749 (F1 0.9343) are reproducible from `flood/metadata/flood_model_metadata.json` against the in-repo labels (re-checked during Phase 10; temporal split ≈ last 25% timestamps). Historical `flood_xgboost_spatial_holdout.pkl` claim (ROC-AUC 0.9635) is superseded |
+| **Metrics** | Reproducible — see `flood/metadata/flood_model_metadata.json` (spatial_holdout + temporal_validation blocks) |
 | **Dependencies** | XGBoost, scikit-learn, Pandas, NumPy |
 
 ---
@@ -186,8 +186,8 @@ This document catalogs all existing models, datasets, training scripts, and arti
 | RI TCIR CNN | `cyclone_backup/models/tcir/` | Keras/NPZ | **Artifact only** — OOF (PR-AUC 0.092) is UNVERIFIED / HISTORICAL CLAIM — no dataset/results in repo; channel-4 norm stats inf/nan; cannot run in current env |
 | Intensity XGBoost | `cyclone intensity/models/final_xgb_regressor.joblib` | joblib | **ABSENT** — retrain via `cyclone intensity/retrain.py` |
 | Recurvature XGBoost | `recurvature/xgb_recurve_model.json` | XGBoost JSON | Trained (baseline) |
-| Rainfall RF | `rain/model/rainfall_classifier_12.pkl` | pickle | Baseline (same-time) |
-| Flood XGBoost | `flood/model/flood_xgboost_spatial_holdout.pkl` | pickle | Case study (FANI) |
+| Rainfall RF | `rain/model/rainfall_classifier_12.pkl` (+ regressor `rain/model/rainfall_regressor_12.pkl`) | pickle | Baseline (same-time two-stage model) |
+| Flood XGBoost | `flood/model/flood_xgboost_improved.pkl` | pickle | Case study (FANI; improved, reproduceable temporal metrics) |
 | Wind Keras | `wind/model/wind_model_best.keras` | Keras | Case study (Yaas) |
 
 ---
@@ -230,7 +230,7 @@ This document catalogs all existing models, datasets, training scripts, and arti
 |------------|--------|-------|
 | **Genesis Prediction** | ✅ **IMPLEMENTED** | LightGBM production + LightGBM/XGBoost/RF ensemble; see Section 16 |
 | **Future Rainfall (3h/6h/12h/24h)** | ❌ Not implemented | Current RF is same-time classifier on FANI only |
-| **Future Wind Field (U/V grids)** | ❌ Not implemented | Current Keras is case study only |
+| **Future Wind Field (U/V grids)** | 🔶 Partially implemented (grid-fed) | `predict_grids()` real inference verified; no production U10/V10 provider in repo; horizon undocumented |
 | **Flood from Forecast Rainfall** | ❌ Not implemented | Current uses observed rainfall, not predicted |
 | **Landslide from Forecast Rainfall** | ❌ Not implemented | Current is static visualization |
 | **Unified Hazard Engine** | ❌ Not implemented | No integration layer |
@@ -597,9 +597,9 @@ import xgboost
 | **Intensity** | `src/models/adapters/intensity_adapter.py` | ✅ IMPLEMENTED | `cyclone intensity/models/final_xgb_regressor.joblib` | XGBoost | Requires training (artifact not yet generated) |
 | **RI** | `src/models/adapters/ri_adapter.py` | ✅ IMPLEMENTED (**IMD-only at runtime**) | `cyclone_backup/models/imd_final_xgboost.json` | XGBoost | Single-source (IMD) at runtime. ERA5/satellite/fusion branches are **designed, NOT wired** (artifacts exist but fail or are absent in-repo); `satellite_probability`/`fusion_probability` = None. See Phase 9 audit |
 | **Recurvature** | `src/models/adapters/recurvature_adapter.py` | ✅ IMPLEMENTED | `recurvature/xgb_recurve_model.json` | XGBoost | **FIXED**: Now uses XGBClassifier (not Booster) for predict_proba |
-| **Rainfall** | `src/models/rainfall/adapter.py` | ✅ IMPLEMENTED (BASELINE) | `rain/model/rainfall_classifier_12.pkl` | sklearn (RF) | Same-time classifier, not forecast |
-| **Wind** | `src/models/wind/adapter.py` | ✅ IMPLEMENTED (BASELINE) | `wind/model/wind_model_best.keras` | TensorFlow/Keras | Yaas case study only |
-| **Flood** | `src/models/flood/adapter.py` | ✅ IMPLEMENTED (BASELINE) | `flood/model/flood_xgboost_spatial_holdout.pkl` | XGBoost | FANI 2019 case study |
+| **Rainfall** | `src/models/rainfall/adapter.py` | ✅ IMPLEMENTED (BASELINE) | `rain/model/rainfall_classifier_12.pkl` (+ `rain/model/rainfall_regressor_12.pkl`) | sklearn (RF) | Same-time two-stage classifier+regressor, not forecast |
+| **Wind** | `src/models/wind/adapter.py` | ✅ IMPLEMENTED (grid-fed inference VERIFIED) | `wind/model/wind_model_best.keras` | TensorFlow/Keras | Yaas case study; no U10/V10 provider in repo |
+| **Flood** | `src/models/flood/adapter.py` | ✅ IMPLEMENTED (BASELINE) | `flood/model/flood_xgboost_improved.pkl` | XGBoost | FANI 2019 case study (improved; temporal metrics reproducible) |
 | **Landslide** | `src/models/landslide/adapter.py` | ✅ IMPLEMENTED (STATIC) | None | — | Static hazard maps only |
 
 ### 19.2 Native Runtime Fix
@@ -638,7 +638,7 @@ import xgboost
 | Recurvature | **AVAILABLE** | Fixed XGBClassifier adapter |
 | Intensity | **ARTIFACT_MISSING** | Training script exists but artifact not generated |
 | Rainfall | **AVAILABLE_BASELINE** | Same-time classifier, not forecast |
-| Wind | **BASELINE** | Single case study, no inference pipeline |
+| Wind | **BASELINE** | Case study (Yaas); grid-fed `predict_grids` inference verified; no production U10/V10 provider |
 | Flood | **BASELINE** | Single event (FANI), spatial holdout only |
 | Landslide | **STATIC_SUSCEPTIBILITY** | No ML model, only static PNG maps |
 | Genesis | **AVAILABLE** | LightGBM production + 3-model soft-voting ensemble (see Section 16) |

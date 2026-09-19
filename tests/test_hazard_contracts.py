@@ -33,6 +33,7 @@ import pandas as pd
 import pytest
 
 from src.core.schema import (
+    Basin,
     RainfallPrediction,
     WindFieldGrid,
     WindFieldPrediction,
@@ -116,6 +117,38 @@ def test_rainfall_results_are_last_four_half_hourly_snapshots():
     assert len(res) == 112000
 
 
+def test_rainfall_two_stage_regressor_artifact_contract():
+    reg_path = REPO_ROOT / "rain/model/rainfall_regressor_12.pkl"
+    assert reg_path.exists(), "two-stage regressor artifact must ship at canonical path"
+    reg = joblib.load(reg_path)
+    assert type(reg).__name__ == "RandomForestRegressor"
+    assert reg.n_features_in_ == 25
+    assert list(reg.feature_names_in_) == [
+        "latitude", "longitude", "cyclone_latitude", "cyclone_longitude",
+        "cyclone_wind_kt", "cyclone_pressure_hpa", "cyclone_pressure_drop_hpa",
+        "relative_latitude", "relative_longitude", "distance_to_cyclone_km",
+        "hour", "day_of_year", "distance_squared", "wind_distance_interaction",
+        "pressure_drop_distance", "rainfall_lag_30min", "rainfall_lag_60min",
+        "rainfall_change_30min", "rainfall_lag_30min_squared",
+        "rainfall_lag_60min_squared", "recent_rainfall_mean",
+        "recent_rainfall_max", "wind_rainfall_interaction",
+        "pressure_drop_rainfall_interaction", "rainfall_distance_interaction",
+    ]
+    X_row = np.zeros((1, 25))
+    X_row[0, 3:6] = [88.0, 500.0, 5.0]  # cyclone lon/press/drop
+    p = float(reg.predict(X_row)[0])
+    assert np.isfinite(p) and p >= 0.0
+
+
+def test_rainfall_regressor_reproduces_metadata_metrics():
+    res = pd.read_csv(REPO_ROOT / "rain/results/model12_results.csv")
+    meta = json.load(open(REPO_ROOT / "rain/metadata/rainfall_model_12_metadata.json"))
+    mae = float(np.mean(np.abs(res["rainfall_mm_hr"] - res["predicted_rainfall_mm_hr"])))
+    assert mae == pytest.approx(meta["metrics"]["mae"], abs=1e-3)
+    assert meta["regressor"]["n_estimators"] == 300
+    assert meta["regressor"]["max_depth"] == 20
+
+
 # --------------------------------------------------------------------------
 # WIND
 # --------------------------------------------------------------------------
@@ -168,13 +201,13 @@ def test_flood_adapter_tolerates_missing_rainfall():
 
 
 def test_flood_artifact_contract():
-    model = joblib.load(REPO_ROOT / "flood/model/flood_xgboost_spatial_holdout.pkl")
+    model = joblib.load(REPO_ROOT / "flood/model/flood_xgboost_improved.pkl")
     assert model.n_features_in_ == 28
     assert list(model.classes_) == [0, 1]
 
 
 def test_flood_features_have_no_future_rainfall():
-    model = joblib.load(REPO_ROOT / "flood/model/flood_xgboost_spatial_holdout.pkl")
+    model = joblib.load(REPO_ROOT / "flood/model/flood_xgboost_improved.pkl")
     feats = [str(f) for f in model.feature_names_in_]
     leaked_future = [f for f in feats if "lead" in f or "future" in f]
     assert leaked_future == []
@@ -214,3 +247,85 @@ def test_landslide_adapter_returns_static_susceptibility():
     assert "No dynamic landslide ML model" in pred.reason
     assert pred.probability_grid.susceptibility_grid.size == 0
     assert pred.confidence == 0.0
+
+
+# --------------------------------------------------------------------------
+# HAZARD ENGINE threshold normalization
+# --------------------------------------------------------------------------
+
+
+def test_hazard_engine_string_thresholds_are_normalized_to_enums():
+    """YAML configs serialize risk_thresholds with string keys; the engine must
+    coerce them to RiskLevel members so component scoring never calls .value on
+    a plain string (regression: 'str' object has no attribute 'value')."""
+    from src.pipeline.hazard_engine import HazardRiskEngine
+    from src.core.schema import (
+        CycloneCategory, CycloneState, RiskLevel,
+        IntensityPrediction, UnifiedForecastState,
+    )
+
+    engine = HazardRiskEngine({
+        "weights": {"intensity": 1.0},
+        "risk_thresholds": {
+            "NONE": [0.0, 0.15],
+            "LOW": [0.15, 0.35],
+            "MODERATE": [0.35, 0.60],
+            "HIGH": [0.60, 0.80],
+            "EXTREME": [0.80, 1.0],
+        },
+    })
+    state = CycloneState(
+        storm_id="2020-REG",
+        basin=Basin.NORTH_INDIAN,
+        timestamp=datetime.now(),
+        latitude=15.0,
+        longitude=85.0,
+    )
+    intensity = IntensityPrediction(
+        predicted_msw_24h=65.0,
+        predicted_category_24h=CycloneCategory.VSCS,
+        uncertainty_kt=10.0,
+        confidence=0.8,
+        model_version="v1.0",
+    )
+
+    assess = engine.compute(cyclone_state=state, intensity=intensity)
+
+    assert isinstance(assess, UnifiedForecastState)
+    # VSCS -> prob 0.75 -> HIGH threshold; returned as a genuine enum member.
+    assert isinstance(assess.overall_hazard_severity, RiskLevel)
+    assert assess.overall_hazard_severity == RiskLevel.HIGH
+    assert "intensity" in assess.assessed_hazards
+    assert assess.uncertainty_summary
+    # uncertainty_summary serializes the enum to its .value string by design.
+    comp = assess.uncertainty_summary["components"]["intensity"]
+    assert comp["risk_level"] == "HIGH"
+
+
+def test_hazard_engine_empty_config_uses_default_enum_thresholds():
+    """An empty config (no thresholds/weights) still yields enum components."""
+    from src.pipeline.hazard_engine import HazardRiskEngine
+    from src.core.schema import (
+        CycloneCategory, CycloneState, RiskLevel,
+        IntensityPrediction,
+    )
+
+    engine = HazardRiskEngine({})
+    state = CycloneState(
+        storm_id="2020-REG2",
+        basin=Basin.NORTH_INDIAN,
+        timestamp=datetime.now(),
+        latitude=15.0,
+        longitude=85.0,
+    )
+    assess = engine.compute(
+        cyclone_state=state,
+        intensity=IntensityPrediction(
+            predicted_msw_24h=65.0,
+            predicted_category_24h=CycloneCategory.VSCS,
+            uncertainty_kt=10.0,
+            confidence=0.8,
+            model_version="v1.0",
+        ),
+    )
+    assert isinstance(assess.overall_hazard_severity, RiskLevel)

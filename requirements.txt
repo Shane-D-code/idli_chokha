@@ -34,3 +34,7 @@ pytest-cov>=4.1.0
 
 # SHAP for explainability
 shap>=0.42.0
+# Backend (FastAPI orchestration boundary)
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+apscheduler>=3.10.0

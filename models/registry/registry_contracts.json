@@ -1,0 +1,104 @@
+{
+  "_comment": "Contract map for TOOFAN model artifacts. METADATA-ONLY documentation of every known artifact and its real data requirements. This map does NOT alter runtime behaviour and does NOT register anything into registry_index.json (registration remains a deliberate, verified action). The dependency graph in pipeline DEFAULT_DEPENDENCIES is intentionally conservative vs. these true requirements: module X may be scheduled after upstreams even as a placeholder.",
+  "generated": "2026-09-18T00:00:00Z",
+  "artifacts": {
+    "genesis": {
+      "module": "genesis",
+      "artifact_base": "genisis models/",
+      "primary_artifact": "tc_genesis_lightgbm_300_OPTIMIZED.joblib",
+      "supporting_artifacts": [
+        "tc_genesis_xgboost_300_OPTIMIZED.joblib",
+        "tc_genesis_randomforest_300_OPTIMIZED.joblib",
+        "tc_genesis_300_imputer.joblib"
+      ],
+      "framework": "lightgbm/xgboost/sklearn",
+      "input_contract": "environmental features (SST, 850/700/500/200 hPa T/R, u850/u200/v850/v200, vertical wind shear) at genesis time",
+      "runtime_status": "not registered in runtime registry",
+      "consumer_provider": "weather_era5 (pressure-level archive)",
+      "note": "Adapter supports raw_model/metadata construction (`src/models/genesis/adapter.py`); registration deferred to avoid flipping runtime statuses in verified integration tests."
+    },
+    "trajectory": {
+      "module": "trajectory",
+      "artifact_base": ".",
+      "primary_artifact": "best_cyclone_model_lt3p_distilled.pth",
+      "supporting_artifacts": ["scalers.pkl"],
+      "framework": "pytorch",
+      "input_contract": "historical track 3h positions + environmental/pressure features",
+      "runtime_status": "registered (vlt3p)",
+      "known_limitation": "adapter requires the `inference` deployment package, absent in repo (pre-existing ModuleNotFoundError); module currently UNAVAILABLE through the orchestrator."
+    },
+    "intensity": {
+      "module": "intensity",
+      "artifact_base": "cyclone intensity/models/intensity_prediction_model.joblib (referenced)",
+      "framework": "sklearn/auxiliary",
+      "input_contract": "IMD best-track wind/pressure deltas",
+      "runtime_status": "not registered",
+      "note": "No verified artifact present; module stays honestly UNAVAILABLE."
+    },
+    "ri": {
+      "module": "ri",
+      "artifact_base": "RI/models",
+      "primary_artifact": "imd_ri_model.json",
+      "supporting_artifacts": [
+        "RI/era5_datasets/gridded_era5_window_6_89.0_30.0.nc",
+        "RI/models/scaler.joblib",
+        "RI/models/ri_threshold.txt",
+        "RI/era5_ri_feature_spec_89.json",
+        "RI/models/imd_era5_comparison_metadata.json"
+      ],
+      "framework": "xgboost (IMD branch) / xgboost (IMD+ERA5 fusion)",
+      "input_contract": "12 IMD features (lat, lon, wind/pressure + 6/12/24h deltas); fusion branch adds ERA5 predictor fields per feature spec",
+      "runtime_status": "registered (v1; ri_fusion v1 as separate entry)",
+      "runtime": "src/models/ri/adapter.py -> src/models/adapters/ri_adapter.py"
+    },
+    "rainfall": {
+      "module": "rainfall",
+      "artifact_base": "rain/",
+      "primary_artifact": "model/rainfall_classifier_12.pkl",
+      "framework": "sklearn",
+      "input_contract": "IMERG precipitation time series (FANI case study)",
+      "runtime_status": "not registered",
+      "consumer_provider": "rainfall_imerg"
+    },
+    "wind": {
+      "module": "wind",
+      "artifact_base": "wind/model",
+      "primary_artifact": "wind_model_best.keras",
+      "supporting_artifacts": [
+        "wind/metadata/wind_normalization.txt",
+        "wind/data/ibtracs_four_cyclones.csv"
+      ],
+      "framework": "tensorflow/keras CNN",
+      "input_contract": "6 temporal frames x 81x57 grid x 2 channels (U10, V10 in m/s); documented normalization wind/metadata/wind_normalization.txt",
+      "runtime_status": "registered (vbaseline)",
+      "runtime": "src/models/wind/adapter.py (TF isolated in subprocesses; orchestrator does NOT hot-load .keras in main process)",
+      "known_limitation": "Yaas 2021 case study; no gridded U10/V10 provider ships in repo; no calibrated confidence."
+    },
+    "flood": {
+      "module": "flood",
+      "artifact_base": "flood/",
+      "primary_artifact": "flood/flood_xgboost_improved.pkl",
+      "framework": "xgboost/sklearn",
+      "input_contract": "accumulated rainfall + terrain (dem.tif missing in repo -> DEM source NOT_AVAILABLE)",
+      "runtime_status": "not registered",
+      "consumer_provider": "terrain"
+    },
+    "landslide": {
+      "module": "landslide",
+      "artifact_base": "landslide/",
+      "framework": "static susceptibility rule-base",
+      "input_contract": "rainfall + terrain slope (static susceptibility output)",
+      "runtime_status": "adapter static; source terrain unavailable"
+    },
+    "recurvature": {
+      "module": "recurvature",
+      "artifact_base": "recurvature/",
+      "primary_artifact": "xgb_recurve_model.json",
+      "supporting_artifacts": ["recurvature/scaler.joblib"],
+      "framework": "xgboost",
+      "input_contract": "track heading/curvature features",
+      "runtime_status": "not registered",
+      "known_limitation": "adapter requires `inference` deployment package, absent in repo (pre-existing ModuleNotFoundError)."
+    }
+  }
+}

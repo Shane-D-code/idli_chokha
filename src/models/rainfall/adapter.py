@@ -66,16 +66,42 @@ class RainfallModelAdapter(RainfallModel):
         self._pipeline = None
         self._feature_columns = None
         self._is_loaded = False
+        self._regressor = None
+        self._regressor_path = None
 
     def load(self, checkpoint_path: str, **kwargs) -> None:
-        """Load the rainfall model from checkpoint."""
+        """Load the rainfall classifier from its checkpoint.
+
+        The two-stage rainfall model (see ``rain/metadata/rainfall_model_12_metadata.json``)
+        also has a RandomForest regressor stage, loaded lazily via the
+        :attr:`regressor` property when ``regressor_path`` is supplied in
+        ``kwargs``. The classifier artifact is identical across the historical
+        ``rain/model/`` copy and the Toofan deployment folders.
+        """
         path = Path(checkpoint_path)
         if not path.exists():
             raise FileNotFoundError(f"Rainfall model artifact not found: {checkpoint_path}")
 
         self._pipeline = joblib.load(path)
         self._feature_columns = []
+        self._regressor = None
+        self._regressor_path = kwargs.get("regressor_path")
         self._is_loaded = True
+
+    @property
+    def regressor(self):
+        """Return the second-stage RandomForest regressor (lazy-loaded).
+
+        Returns ``None`` when the regressor artifact is not configured/present.
+        """
+        if self._regressor_path and self._regressor is None:
+            reg_path = Path(self._regressor_path)
+            if not reg_path.exists():
+                warnings.warn(f"Rainfall regressor artifact not found: {self._regressor_path}")
+                self._regressor_path = None
+                return None
+            self._regressor = joblib.load(reg_path)
+        return self._regressor
 
     def validate_input(self, input_data: CycloneState) -> bool:
         """Validate input - this model requires IMERG rainfall grids."""
@@ -133,11 +159,16 @@ class ModelAdapter(RainfallModelAdapter):
 
 def create_rainfall_adapter(
     checkpoint_path: str = "rain/model/rainfall_classifier_12.pkl",
-    model_version: str = "baseline"
+    model_version: str = "baseline",
+    regressor_path: str = "rain/model/rainfall_regressor_12.pkl",
 ) -> RainfallModelAdapter:
-    """Factory function to create rainfall adapter."""
+    """Factory function to create rainfall adapter (two-stage model).
+
+    Loads the Rainfall classifier and, when the regressor artifact is present,
+    lazily exposes the second-stage regressor via ``adapter.regressor``.
+    """
     model_info = ModelInfo(
-        name="rainfall_rf",
+        name="rainfall_two_stage",
         version=model_version,
         model_type="rainfall",
         loaded_at=datetime.utcnow(),
@@ -154,5 +185,5 @@ def create_rainfall_adapter(
         )
         return adapter
 
-    adapter.load(checkpoint_path)
+    adapter.load(checkpoint_path, regressor_path=regressor_path)
     return adapter

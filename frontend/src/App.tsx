@@ -1,5 +1,8 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import DashboardPage from "@/pages/DashboardPage";
+import GenesisPage from "@/pages/GenesisPage";
+import ForecastPage from "@/pages/ForecastPage";
+import ImpactPage from "@/pages/ImpactPage";
 import LiveMonitorPage from "@/pages/LiveMonitorPage";
 import TrackPage from "@/pages/TrackPage";
 import IntensityPage from "@/pages/IntensityPage";
@@ -22,6 +25,9 @@ export function AppRoutes() {
     <Routes>
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="/dashboard" element={<DashboardPage />} />
+      <Route path="/genesis" element={<GenesisPage />} />
+      <Route path="/forecast" element={<ForecastPage />} />
+      <Route path="/impact" element={<ImpactPage />} />
       <Route path="/live" element={<LiveMonitorPage />} />
       <Route path="/track" element={<TrackPage />} />
       <Route path="/intensity" element={<IntensityPage />} />

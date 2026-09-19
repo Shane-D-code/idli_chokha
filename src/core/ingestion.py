@@ -149,31 +149,62 @@ class IBTrACSLoader(DataSource):
 
     def _standardize_columns(self, df: pd.DataFrame) -> pd.DataFrame:
         """Standardize IBTrACS columns."""
-        # IBTrACS v04r01 column mapping
+        # IBTrACS v04r01 column mapping (agency-specific wind/pressure sources
+        # vary by file: WMO_*, USA_*, NOAA_* are all observed best-track sets).
         col_map = {
             'SID': 'storm_id',
             'ISO_TIME': 'timestamp',
             'LAT': 'latitude',
             'LON': 'longitude',
-            'WMO_WIND': 'max_wind_kt',
-            'WMO_PRES': 'central_pressure_hpa',
             'BASIN': 'basin',
             'STORM_DIR': 'heading_deg',
             'STORM_SPEED': 'translation_speed_kt',
         }
         df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
 
+        # Observed wind/pressure best-track sets vary by IBTrACS file
+        # (WMO_*, USA_*, NOAA_*). Coalesce in a priority order so a file
+        # containing several agency columns still yields ONE standardized pair.
+        for target, preferred in [('max_wind_kt', ('WMO_WIND', 'USA_WIND', 'NOAA_WIND')),
+                                  ('central_pressure_hpa', ('WMO_PRES', 'USA_PRES', 'NOAA_PRES'))]:
+            cols = [c for c in preferred if c in df.columns]
+            if cols:
+                if target not in df.columns:
+                    df[target] = df[cols[0]].copy()
+                else:
+                    df[target] = df[df.columns[df.columns == target][0]].copy()
+                for c in cols:
+                    if c == target or c not in df.columns:
+                        continue
+                    df[target] = df[target].fillna(df[c])
+                df = df.drop(columns=[c for c in cols if c in df.columns])
+
         if 'timestamp' in df.columns:
-            df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True)
+            df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True, errors='coerce')
+            valid = df['timestamp'].notna()
+            if valid.sum() < len(df):
+                df = df[valid].copy()
 
         if 'basin' in df.columns:
             df['basin'] = df['basin'].str.strip()
+        elif 'basin' not in df.columns:
+            df['basin'] = Basin.NORTH_INDIAN.value
+
+        # IBTrACS stores numeric cells as text ('' for missing); coerce so
+        # arithmetic on the standardized columns never sees str values.
+        for col in ['max_wind_kt', 'central_pressure_hpa', 'latitude', 'longitude',
+                    'heading_deg', 'translation_speed_kt']:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
 
         return df
 
 
 class ERA5Loader(DataSource):
     """Load ERA5 reanalysis data (NetCDF or pre-extracted CSV)."""
+    def load(self, **kwargs) -> Any:
+        raise NotImplementedError("use load_extracted_features() / load_raw_netcdf()")
+
 
     def __init__(self, data_dir: str | Path, extracted_features_path: Optional[str | Path] = None):
         self.data_dir = Path(data_dir)
@@ -247,6 +278,9 @@ class ERA5Loader(DataSource):
 
 class SatelliteLoader(DataSource):
     """Load satellite imagery (INSAT, TCIR, etc.)."""
+    def load(self, **kwargs) -> Any:
+        raise NotImplementedError("use load_metadata() / load_image()")
+
 
     def __init__(self, data_dir: str | Path, metadata_path: Optional[str | Path] = None):
         self.data_dir = Path(data_dir)
@@ -373,6 +407,9 @@ class IMERGLoader(DataSource):
 
 class DEMLoader(DataSource):
     """Load Digital Elevation Model and derived terrain products."""
+    def load(self, **kwargs) -> Any:
+        raise NotImplementedError("use load_dem() / load_derived()")
+
 
     def __init__(self, dem_path: str | Path, derived_dir: Optional[str | Path] = None):
         self.dem_path = Path(dem_path)
@@ -477,6 +514,9 @@ class LandCoverLoader(DataSource):
 
 class RiverNetworkLoader(DataSource):
     """Load river network and drainage data."""
+    def load(self, **kwargs) -> Any:
+        raise NotImplementedError("use load_drainage_area() / load_flow_accumulation()")
+
 
     def __init__(self, data_dir: str | Path):
         self.data_dir = Path(data_dir)
@@ -508,6 +548,9 @@ class RiverNetworkLoader(DataSource):
 
 class TideStormSurgeLoader(DataSource):
     """Load tide and storm surge data."""
+    def load(self, **kwargs) -> Any:
+        raise NotImplementedError("use load_tide() / load_surge()")
+
 
     def __init__(self, data_dir: str | Path):
         self.data_dir = Path(data_dir)
@@ -598,10 +641,17 @@ class DataIngestionLayer:
         return {name: src.get_metadata() for name, src in self.sources.items()}
 
     def load_cyclone_history(self, storm_id: str, basin: Basin,
-                             lookback_hours: int = 72) -> pd.DataFrame:
-        """Load historical cyclone track for a storm."""
+                             lookback_hours: int = 72,
+                             reference_time: Optional[datetime] = None) -> pd.DataFrame:
+        """Load historical cyclone track for a storm.
+
+        The retrieval window is anchored at ``reference_time`` (falling back to
+        now) so HISTORICAL storms can be loaded against their forecast
+        initialization time instead of only live storms in the last
+        ``lookback_hours``.
+        """
         # Prefer IMD, fallback to IBTrACS
-        end_time = datetime.utcnow()  # Will be overridden by caller with reference time
+        end_time = reference_time or datetime.utcnow()  # Caller may anchor on reference time
         start_time = end_time - timedelta(hours=lookback_hours)
 
         if 'imd' in self.sources and self.sources['imd'].is_available():

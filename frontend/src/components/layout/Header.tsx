@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Menu, RotateCw, Search, SlidersHorizontal } from "lucide-react";
 import { useApp } from "@/state/AppContext";
 import { ModeTag } from "./ModeTag";
+import HealthIndicator from "./HealthIndicator";
 import { NotificationsDrawer } from "@/components/notifications/NotificationsDrawer";
 import { SearchOverlay } from "@/components/search/SearchOverlay";
 
@@ -93,6 +94,10 @@ export function Header({ onOpenSidebar }: { onOpenSidebar: () => void }) {
             />
             {stale ? "PARTIAL" : "OPERATIONAL"}
           </span>
+
+          <div style={{ marginLeft: 12 }}>
+            <HealthIndicator />
+          </div>
 
           <button
             className="header-icon-btn"

@@ -1,9 +1,9 @@
 # TOOFAN Model Health Check Report
 
-**Audit Date:** 2026-09-02 (updated 2026-09-12 per Phase 0–6 findings)
+**Audit Date:** 2026-09-02 (updated 2026-09-18 after Wind integration)
 **Audit Type:** FULL — READ-ONLY INSPECTION
 **Scope:** All model artifacts, adapters, orchestrator, scientific validation
-**Test Suite:** 169/169 PASSED (2026-09-12)
+**Test Suite:** 235 passed / 6 failed / 6 errors (2026-09-18; failures+errors pre-existing trajectory/recurvature only)
 
 ---
 
@@ -17,9 +17,9 @@
 | Prediction executes | 5/9 (Genesis, Trajectory, Recurvature, RI-IMD, Landslide-static) |
 | Production ready | 0/9 (no model meets full production criteria) |
 | Scientifically validated | 1/9, limited (Trajectory has storm-wise CV evidence, **historical** — point-forecast skill not re-verified in-repo; uncertainty NOT validated) |
-| Tests passing | 169/169 |
+| Tests passing | 235 / 247 (6 pre-existing trajectory failures, 6 pre-existing errors) |
 
-**Bottom line:** Genesis and Trajectory are the only technically functional models with real inference capability. Trajectory point forecasts run, but its uncertainty head is **saturated (~209.9 km), NOT calibrated, and does NOT grow with lead time** — treat `sigma_km` as an unvalidated bound, not a calibrated spread. Intensity has no trained artifact. RI has a partial IMD-only branch working. Rainfall, Wind, Flood, and Landslide are baselines/stubs that cannot produce real predictions in the pipeline. No model is production-ready.
+**Bottom line:** Genesis and Trajectory are the only technically functional models with real inference capability. Trajectory point forecasts run, but its uncertainty head is **saturated (~209.9 km), NOT calibrated, and does NOT grow with lead time** — treat `sigma_km` as an unvalidated bound, not a calibrated spread. Intensity has no trained artifact. RI has a partial IMD-only branch working. Rainfall, Flood, and Landslide are baselines/stubs that cannot produce real predictions in the pipeline. Wind's model/adapter/registry/real grid-fed inference are now **VERIFIED** (`predict_grids`), but no gridded U10/V10 provider ships in the repository, so the orchestrator wind step still returns honest `BASELINE` (no fabricated fields). No model is production-ready.
 
 ---
 
@@ -39,7 +39,7 @@
 | 10 | RI — Fusion | N/A | N/A | FAIL | FAIL | FAIL | FAIL | NOT VERIFIED | FAIL |
 | 11 | Recurvature | PASS | PASS | PASS | PASS | PASS | PASS | BASELINE ONLY | PARTIAL |
 | 12 | Rainfall | PASS | PASS | STATIC ONLY | STATIC ONLY | PARTIAL | PASS | BASELINE ONLY | BASELINE ONLY |
-| 13 | Wind | PASS | PASS | STATIC ONLY | STATIC ONLY | PARTIAL | PASS | BASELINE ONLY | BASELINE ONLY |
+| 13 | Wind | PASS | PASS | YES (grid-fed) | VERIFIED (grid-fed) | YES | YES (model discovered) | CASE-STUDY (Yaas) | PARTIAL |
 | 14 | Flood | PASS | PASS | DATA UNAVAILABLE | DATA UNAVAILABLE | PARTIAL | PASS | BASELINE ONLY | DATA UNAVAILABLE |
 | 15 | Landslide | N/A (no ML) | PASS | STATIC ONLY | STATIC ONLY | PASS | PASS | STATIC SUSCEPTIBILITY | STATIC ONLY |
 
@@ -64,7 +64,7 @@
 |----------|------|---------|------|
 | Deployed distilled checkpoint | `best_cyclone_model_lt3p_distilled.pth` (repo root) | `b9cfc710aa55881dabc4149ebbdd6ac57f814bb93a5118c22b9e41209d57765b` (2026-09-12) | 3,912,349 B |
 
-> Note: the legacy `cyclone_path/checkpoints/v12_best_model.pt` (SHA `cac2aafc…`, 2,040,886 B) does **not** exist in this repository; the deployed artifact is the distilled LT3P checkpoint above, loaded via `cyclone_path_deployment_package/`.
+> Note: the legacy `cyclone_path/checkpoints/v12_best_model.pt` (SHA `cac2aafc…`, 2,040,886 B) does **not** exist in this repository; the deployed artifact is the distilled LT3P checkpoint above. `src/models/adapters/trajectory_adapter.py` tries `cyclone_path_deployment_package/` first and falls back to `cyclone_path_deployment_package_v7b/`, which currently contains the usable deployment sources.
 
 ### 3.3 Intensity
 
@@ -93,6 +93,7 @@
 | Artifact | Path | SHA-256 | Size |
 |----------|------|---------|------|
 | RandomForest classifier | `rain/model/rainfall_classifier_12.pkl` | `12197e9b5be6b354ca259653e65dd81d0344bacb8f3dd229167a10d3928bf6b0` | 16,177,945 B |
+| RandomForest regressor (second stage) | `rain/model/rainfall_regressor_12.pkl` | `9595602fa4e3e8eea4bbba153c9912e8203901073c4833ca8695273ef922f667` | 435,194,337 B |
 
 ### 3.7 Wind
 
@@ -104,7 +105,8 @@
 
 | Artifact | Path | SHA-256 | Size |
 |----------|------|---------|------|
-| XGBoost pipeline | `flood/model/flood_xgboost_spatial_holdout.pkl` | `97294b60cdba57d1035aa106454633ad34129ee1c598fd550487d85896f32fd2` | 510,284 B |
+| XGBoost classifier (improved — canonical) | `flood/model/flood_xgboost_improved.pkl` | `2a6b17a76020f7b009f48ad51f206a8d6640b66dbad15b857450ba77905b233e` | 1,303,955 B |
+| Historical XGBoost classifier (superseded) | `flood/model/flood_xgboost_spatial_holdout.pkl` | `97294b60cdba57d1035aa106454633ad34129ee1c598fd550487d85896f32fd2` | 510,284 B |
 
 ### 3.9 Landslide
 
@@ -146,7 +148,7 @@ No ML artifact exists. Static hazard map generation only (stage17_hazard_maps).
 
 ### 4.2 Trajectory (V12-distilled)
 
-**Artifact path:** `best_cyclone_model_lt3p_distilled.pth` (repo root) + `scalers.pkl` (repo root) — deployed via `cyclone_path_deployment_package/`. The legacy `cyclone_path/checkpoints/v12_best_model.pt` path does not exist in this repository.
+**Artifact path:** `best_cyclone_model_lt3p_distilled.pth` (repo root) + `scalers.pkl` (repo root) — deployed through `src/models/adapters/trajectory_adapter.py`, with source fallback from `cyclone_path_deployment_package/` to `cyclone_path_deployment_package_v7b/`. The legacy `cyclone_path/checkpoints/v12_best_model.pt` path does not exist in this repository.
 **Architecture:** CycloneTransformerV11 (Transformer encoder + multi-horizon decoder)
 **Framework:** PyTorch
 **Model config:** d_model=128, nhead=4, num_layers=3, dim_feedforward=256
@@ -265,34 +267,36 @@ No ML artifact exists. Static hazard map generation only (stage17_hazard_maps).
 
 **Special rules verified:**
 - Same-time vs future forecast: VERIFIED — same-time classifier, NOT future forecasting
-- Two-stage "classifier + regressor" claim in metadata.json: **regressor artifact ABSENT from repo** — only the classifier exists
+- Two-stage "classifier + regressor" claim in metadata.json: **regressor now ships** at `rain/model/rainfall_regressor_12.pkl` (RandomForestRegressor, 25 features; load + contract verified; full metric reproduction requires the absent feature-builder script)
 
 ### 4.7 Wind
 
 **Artifact path:** `wind/model/wind_model_best.keras`
 **Architecture:** Keras ConvLSTM2D encoder–decoder: input (6, 81, 57, 2) U10/V10 grids → output (81, 57, 2) "future_wind" (U10/V10, m/s); horizon/alignment **undocumented** (no training script)
 **Framework:** TensorFlow/Keras
-**Model loads:** **NO on this environment** (verified Phase 10) — `import tensorflow` hard-aborts the interpreter (SIGABRT, libc++ mutex failure); the load path now probes TF import health in a subprocess and reports an explicit `UNAVAILABLE` status instead of crashing
-**Prediction:** Returns `BASELINE` (model loaded) or explicit `UNAVAILABLE` (TF runtime unusable) — Yaas 2021 single case study (model never executed; `status`/`explanation` schema fields added in Phase 10)
-**Adapter:** `validate_input()` returns False (requires gridded fields not in CycloneState)
+**Model loads:** **YES (verified)** — loads in-process after a subprocess TF import-health probe; if a TF import would hard-abort the interpreter (SIGABRT/libc++ mutex on broken builds) the adapter reports an explicit `UNAVAILABLE` instead of crashing
+**Prediction:** Real inference is implemented and verified via `predict_grids()` on caller-supplied U10/V10 grids: documented normalization → model → denormalized m/s wind fields (`status="AVAILABLE"`). `model.predict` runs in an **isolated subprocess** (imports TF before pandas — on macOS arm64, pandas-before-TF deadlocks in-process predict; subprocess also contains any TF hard-abort). Without grids the adapter stays honest `BASELINE`/`UNAVAILABLE` with zero fabricated fields.
+**Adapter:** `validate_input()` returns False (requires gridded fields not in CycloneState); `predict_grids(grids, ...)` is the real input path and rejects malformed contracts (shape/NaN)
 **Training pipeline:** NOT DOCUMENTED in repository; no scaler object (only `wind_normalization.txt`); no numeric metrics
+**Registry/orchestrator:** registered as `wind_vbaseline` (`name=wind, version=baseline`) in `models/registry/registry_index.json`; `PipelineOrchestrator` discovers and attaches the model (module `model is not None`)
 
-**Classification:** CASE-STUDY / BASELINE — Yaas 2021 only, not generalized
-**Status:** BASELINE ONLY / UNAVAILABLE (orchestrator: UNAVAILABLE — not registered)
+**Classification:** CASE-STUDY (Yaas 2021) — not generalized; grid-fed inference VERIFIED, full pipeline output NOT verified (no gridded U10/V10 provider ships in this repo, and the orchestrator wind step needs upstream trajectory+intensity)
+**Status:** PARTIAL — model load / adapter / registry / inference VERIFIED; production input provider absent
 
 **Special rules verified:**
 - Generalized vs case-study: VERIFIED — CASE-STUDY (Yaas 2021 only)
-- Runtime-safety: VERIFIED (Phase 10) — `create_wind_adapter()` no longer crashes the process; no fabricated wind output (empty `wind_fields`, `confidence=0.0`)
+- Runtime-safety: VERIFIED (Phase 10 + wind integration) — adapter never hard-aborts and never fabricates wind fields; grid-fed path runs real inference
+- Registry discovery: VERIFIED — `registry.get("wind","baseline")` and `registry.load_model("wind","baseline")` resolve; `.keras` input/output contract `(None,6,81,57,2) -> (None,81,57,2)` pinned by `tests/test_wind_pipeline.py`
 
 ### 4.8 Flood
 
-**Artifact path:** `flood/model/flood_xgboost_spatial_holdout.pkl`
+**Artifact path:** `flood/model/flood_xgboost_improved.pkl` (Toofan "improved" — canonical; supersedes `flood_xgboost_spatial_holdout.pkl`)
 **Architecture:** **raw** XGBClassifier (28 features — 16 IMERG rainfall + 12 static hydrology; NOT a Pipeline; no scaler)
 **Framework:** XGBoost
 **Model loads:** YES
 **Prediction:** Returns `DATA_UNAVAILABLE` — requires rainfall grids + full geographic preprocessing
 **Adapter:** Requires rainfall prediction with actual grids + full geographic feature engineering (not available)
-**Validation:** Spatial holdout on FANI 2019 claimed, but the claimed metrics (ROC-AUC 0.9635 / PR-AUC 0.814) are **UNVERIFIED / HISTORICAL CLAIM — NOT REPRODUCED**: the exact 94-cell holdout split is not in the repo. The "temporal validation" file uses training-period timestamps + all 374 cells with per-cell-constant labels (~100% accuracy) — not a valid temporal holdout.
+**Validation:** Spatial holdout on FANI 2019 (ROC-AUC 0.9649 / PR-AUC 0.8480) and temporal-validation (ROC-AUC 0.9946 / PR-AUC 0.9749 / F1 0.9343) — both blocks reproducible from `flood/metadata/flood_model_metadata.json` against in-repo labels (temporal ≈ last-25% timestamps). The historical 1st-gen spatial-holdout claim (ROC-AUC 0.9635) is superseded.
 **Label leak:** labels are per-cell constant across all timestamps (post-event EMSR357 map propagated to pre-storm times); features use only current + past rainfall (verified — no future-rainfall leak).
 
 **Status:** DATA UNAVAILABLE
@@ -386,7 +390,7 @@ Genesis
 4. **RI:** ERA5 branch expects 89 features but CycloneState provides only 17; satellite CNN requires IR image patch not in CycloneState; no trained fusion model; simple averaging used as fallback
 5. **Recurvature:** DIST2LAND is a rough placeholder (200-500 km estimates); dir_change_3h/9h default to 0.0 without historical track
 6. **Rainfall:** Same-time classifier only, cannot forecast future rainfall
-7. **Wind:** Undocumented architecture, single case study (Yaas 2021), no inference pipeline
+7. **Wind:** Undocumented architecture, single case study (Yaas 2021); model/adapter/registry/inference verified (grid-fed `predict_grids`), but NO gridded U10/V10 provider exists in the repository and full pipeline output is not wired
 8. **Flood:** Requires full geographic preprocessing pipeline (terrain, hydrology, land cover, soil) not available in standard inputs
 9. **Landslide:** No ML model — only static hazard maps
 10. **Intensity artifact missing:** `cyclone intensity/models/final_xgb_regressor.joblib` does not exist
@@ -428,7 +432,7 @@ Genesis
 | 4 | RI | PARTIAL | IMD branch works (0.433); ERA5 branch fails (feature mismatch) |
 | 5 | Recurvature | PASS | probability=0.396, risk=MODERATE |
 | 6 | Rainfall | STATIC | Returns AVAILABLE_BASELINE |
-| 7 | Wind | STATIC | Returns BASELINE |
+| 7 | Wind | GRID-FED | Model discovered/attached; `predict_grids()` runs real inference on caller-supplied grids; returns `BASELINE` in the standard DAG (no U10/V10 provider) |
 | 8 | Landslide | STATIC | Returns STATIC_SUSCEPTIBILITY |
 | 9 | Flood | DATA UNAVAILABLE | Returns DATA_UNAVAILABLE |
 | 10 | HazardRiskEngine | PARTIAL | Computes from available outputs only |
@@ -445,6 +449,6 @@ Genesis
 4. **Train RI fusion model:** Replace simple averaging with trained meta-classifier
 5. **Improve Genesis validation:** Add temporal holdout validation (e.g., 2023-2024 test set)
 6. **Build real rainfall forecasting model:** Replace same-time classifier with future rainfall prediction
-7. **Document and generalize wind model:** Add training script, expand beyond Yaas case study
+7. **Wind:** Real grid-fed inference is implemented (`predict_grids`) and registry/orchestrator discovery are wired; remaining work is a legitimate gridded U10/V10 input provider, a documented grid extent/orientation, and a training script to generalize beyond the Yaas case study
 8. **Build flood preprocessing pipeline:** Integrate DEM/hydrology/land cover feature engineering
 9. **Build dynamic landslide model:** Train ML model on cyclone-triggered landslide events

@@ -9,22 +9,26 @@
 export type ModelOperationalStatus =
   | "AVAILABLE"
   | "LIVE"
-  | "LIMITED"
   | "BASELINE"
-  | "AVAILABLE_BASELINE"
   | "DEGRADED"
+  | "NOT_AVAILABLE"
+  | "ERROR"
   | "MODEL_MISSING"
   | "RUNTIME_REQUIRED"
   | "DATA_REQUIRED"
-  | "DATA_UNAVAILABLE"
-  | "STATIC_SUSCEPTIBILITY"
-  | "NOT_IMPLEMENTED"
   | "NOT_INTEGRATED"
   | "UNAVAILABLE";
 
-export type DataSourceStatus = "CONNECTED" | "STALE" | "MISSING" | "ERROR";
+export type DataSourceStatus =
+  | "CONNECTED"
+  | "STALE"
+  | "MISSING"
+  | "ERROR"
+  | "AVAILABLE"
+  | "DEGRADED"
+  | "NOT_AVAILABLE";
 
-export type HazardSeverity = "LOW" | "MODERATE" | "HIGH" | "VERY_HIGH" | "EXTREME";
+export type HazardSeverity = "NONE" | "LOW" | "MODERATE" | "HIGH" | "VERY_HIGH" | "EXTREME";
 
 export type AlertSeverity = "INFO" | "WATCH" | "WARNING" | "CRITICAL";
 
@@ -308,6 +312,8 @@ export interface GenesisSubModel {
   role: "PRIMARY" | "ENSEMBLE";
   status: ModelOperationalStatus;
   probability24h?: number;
+  probability48h?: number;
+  probability72h?: number;
   weight?: number;
   message?: string;
 }
@@ -316,6 +322,12 @@ export interface GenesisReport {
   status: PredictionStatus;
   subModels: GenesisSubModel[];
   riskZones?: GenesisZone[];
+  /** Decision threshold for the binary genesis class (e.g. 0.24). */
+  threshold?: number;
+  /** Whether a calibration artifact was applied to the raw probabilities. */
+  calibrated?: boolean;
+  /** Scientific status reported by the provenance layer (e.g. "prototype"). */
+  scientificStatus?: string;
 }
 
 export interface GenesisZone {

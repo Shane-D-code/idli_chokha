@@ -108,5 +108,43 @@
       "provenance": "RI/era5_datasets/imd_era5_fusion_experiment/ (locked artifacts; docs/model_audit/ri_imd_era5_fusion_runtime.md)"
     },
     "file_hash": "dfdb75adb4be284599a40c7e21b887a156795b827313b629207197f2c32bda20"
+  },
+  "wind_vbaseline": {
+    "name": "wind",
+    "version": "baseline",
+    "model_type": "wind",
+    "training_dataset": "Yaas 2021 case study; observed/forecast U10/V10 grids trained outside this repo (referenced data: wind/data/ibtracs_four_cyclones.csv)",
+    "feature_version": "v1 (6 temporal frames x 81x57 spatial grid x 2 channels U10/V10, m/s)",
+    "training_period": [
+      "",
+      ""
+    ],
+    "validation_metrics": {},
+    "test_metrics": {},
+    "preprocessing_version": "v1 (documented normalization wind/metadata/wind_normalization.txt: U10 mean 1.7261697 std 4.4725676; V10 mean 3.1894329 std 4.518691)",
+    "checkpoint_path": "wind/model/wind_model_best.keras",
+    "calibration_artifact": null,
+    "timestamp": "2026-09-18T00:00:00.000000",
+    "git_commit": "e8fc36e",
+    "configuration": {
+      "framework": "tensorflow",
+      "normalization": "wind/metadata/wind_normalization.txt",
+      "input_shape": [
+        null,
+        6,
+        81,
+        57,
+        2
+      ],
+      "output_shape": [
+        null,
+        81,
+        57,
+        2
+      ],
+      "grid_contract": "6 frames of U10/V10 (m/s) on a 81x57 grid; spatial extent/orientation undocumented; no gridded U10/V10 provider ships in this repository",
+      "historical_variant": "wind_model.keras (SHA-256 b1fafcc91f24dda3e111cc01f762b9214aaf7a00c77a7c2205cd46c30032efb9) retained as documented baseline"
+    },
+    "file_hash": "53779bf2c5619b59f7bd08d4093ca70e1419aabc3d24437a59ffd2fd47655132"
   }
 }

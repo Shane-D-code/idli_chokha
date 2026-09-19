@@ -36,23 +36,19 @@ export default function FloodPage() {
 
   if (loading) return <div className="page"><LoadingState rows={3} /></div>;
 
-  // A flood module reporting DATA_UNAVAILABLE has no assessed overall risk —
-  // the pill must not be rendered as a live classification.
-  const floodUsable =
-    data?.status.status !== "UNAVAILABLE" &&
-    data?.status.status !== "DATA_UNAVAILABLE" &&
-    data?.status.status !== "RUNTIME_REQUIRED";
-
   return (
     <div className="page">
       <div className="page-head">
-        <div className="page-kicker">Hazard</div>
+        <div className="page-kicker">Forecast · Hazard</div>
         <h1 className="page-title">Flood</h1>
         <p className="page-sub">Spatial flood hazard analysis — affected districts and inundation risk.</p>
         <div className="row" style={{ marginTop: "var(--sp-3)" }}>
           {data?.status ? <StatusLabel status={data.status.status} /> : null}
           <DemoBanner />
         </div>
+        {data?.status && (data.status.status === "NOT_AVAILABLE" || data.status.status === "ERROR") && data.status.message ? (
+          <p className="small muted" style={{ marginTop: "var(--sp-2)" }}>Reason: {data.status.message}</p>
+        ) : null}
       </div>
 
       {/* ═══ LARGE GEOGRAPHIC FLOOD MAP ═══ */}
@@ -85,7 +81,7 @@ export default function FloodPage() {
                 </div>
               ))
             ) : (
-              <p className="small muted">No district-level flood output available.</p>
+              <p className="small muted">No district-level flood output available.{data?.status?.message ? ` Reason: ${data.status.message}` : ""}</p>
             )}
           </div>
         </div>
@@ -94,12 +90,10 @@ export default function FloodPage() {
           <div className="panel heavy">
             <div className="panel-head"><span className="panel-title">Overall Flood Risk</span></div>
             <div className="panel-body">
-              {floodUsable && data?.overallRisk ? (
+              {data?.overallRisk ? (
                 <RiskPill severity={data.overallRisk} />
               ) : (
-                <p className="small muted">
-                  {data ? "No overall risk — flood module is not producing a live assessment." : "—"}
-                </p>
+                <p className="small muted">—</p>
               )}
             </div>
           </div>

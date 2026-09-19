@@ -56,11 +56,11 @@ function clampLon(v: number): number {
 }
 
 // ── Scientific atlas track / forecast / hazard palette ──
-// All colours are optimised for strong contrast against the deep blue-green ocean.
-export const TRACK_COLOR     = "#F2EFE5";          // observed track — warm ivory
-export const FORECAST_COLOR  = "#E84D3D";          // forecast trajectory — warm red
-export const CURRENT_POS_COLOR = "#E84D3D";        // current position — warm red
-export const UNCERTAINTY_FILL = "rgba(230,163,58,0.13)";
-export const UNCERTAINTY_STROKE = "rgba(230,163,58,0.35)";
-export const REF_NORMAL_COLOR = "#A6B8B9";         // normal reference — muted teal
+// All colours are optimised for strong contrast against the deep ocean.
+export const TRACK_COLOR     = "#F2F6FB";          // observed track — cool ivory-white
+export const FORECAST_COLOR  = "#E5533C";          // forecast trajectory — critical red
+export const CURRENT_POS_COLOR = "#E5533C";        // current position — critical red
+export const UNCERTAINTY_FILL = "rgba(140,195,220,0.16)";
+export const UNCERTAINTY_STROKE = "rgba(170,205,225,0.45)";
+export const REF_NORMAL_COLOR = "#9CC4DC";         // normal reference — ice blue
 export const REF_RECURVING_COLOR = "#D4A33A";      // recurving reference — ochre

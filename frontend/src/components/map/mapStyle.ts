@@ -9,7 +9,7 @@
 
 const POSITRON_STYLE_URL = "https://tiles.openfreemap.org/styles/positron";
 
-const OCEAN         = "#0B5967";
+const OCEAN         = "#10496E";
 
 // In this tile source, LAND is rendered as the style BACKGROUND (there is no
 // dedicated land polygon layer — the "water" layer is drawn over the ocean on
@@ -17,13 +17,14 @@ const OCEAN         = "#0B5967";
 const LAND_COVER    = "#EDE9DB";   // land / background — warm ivory
 const LAND_WOOD     = "#DDD9CC";
 
-// Geographic boundary palette (green / olive cartographic treatment).
-const COUNTRY_BORDER  = "rgba(110,148,64,0.85)";   // country border — strong olive-green
-const STATE_BORDER    = "rgba(160,172,140,0.6)";  // state/admin — visible pale green-gray
+// Geographic boundary palette (cool blue cartographic treatment, on-brand
+// with the deep-ocean surface).
+const COUNTRY_BORDER  = "rgba(150,205,235,0.55)";   // country border — calm cyan-blue
+const STATE_BORDER    = "rgba(170,200,220,0.32)";  // state/admin — subtle pale blue
 
 const TEXT_DARK     = "#30302C";   // city / country label on ivory land
 const TEXT_MID      = "#3A3830";
-const TEXT_OCEAN    = "#8FAFB0";   // ocean label — muted teal
+const TEXT_OCEAN    = "#A9CCE0";   // ocean label — ice blue over deep ocean
 const HALO          = "rgba(237,233,219,0.92)";
 
 // Accepted layer IDs that should survive the transformation.
@@ -155,7 +156,7 @@ function transformLayer(layer: any): any {
     return layer;
   }
   if (id === "boundary_disputed") {
-    paint["line-color"]     = "rgba(127,174,85,0.30)";
+    paint["line-color"]     = "rgba(150,205,235,0.22)";
     paint["line-dasharray"] = [1, 4];
     return layer;
   }
@@ -211,7 +212,7 @@ function recolourLabel(layer: any): void {
   // Water-name labels — muted italic teal over dark ocean
   if (id === "water_name_point_label" || id === "water_name_line_label") {
     paint["text-color"]      = TEXT_OCEAN;
-    paint["text-halo-color"] = "rgba(6,59,74,0.7)";
+    paint["text-halo-color"] = "rgba(7,32,47,0.72)";
     paint["text-halo-width"] = 1.0;
     paint["text-halo-blur"]  = 0;
   }
@@ -222,10 +223,11 @@ function recolourLabel(layer: any): void {
     paint["text-halo-width"] = 1.4;
   }
 
-  // City labels — dark charcoal (no white labels on ivory land)
+  // City labels — dark charcoal (no white labels on ivory land), reduced visibility
   if (id === "label_city" || id === "label_city_capital") {
     paint["text-color"] = "#30302C";
     paint["text-halo-width"] = 1.5;
+    paint["text-opacity"] = ["interpolate", ["linear"], ["zoom"], 5, 0, 7, 0.7, 10, 0.9];
   }
 }
 
@@ -343,7 +345,7 @@ function fallbackStyle(): maplibregl.StyleSpecification {
         type: "symbol",
         source: "openmaptiles",
         "source-layer": "place",
-        minzoom: 3,
+        minzoom: 5,
         filter: ["all", ["==", ["get", "class"], "city"], ["!=", ["get", "capital"], 2]],
         layout: {
           "icon-allow-overlap": true,

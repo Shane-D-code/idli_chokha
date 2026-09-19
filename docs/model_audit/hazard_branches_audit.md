@@ -34,8 +34,10 @@ where the evidence needed to reproduce them is absent.
    per-cell IMERG rainfall for a single case study (FANI, 2019-04-30). It is a
    classifier, **not a rainfall forecast** (tested: adapter explanation says so).
 2. **Target**: binary class `heavy` (per-cell `rainfall_mm_hr >= 10.0`); the
-   regressor counterpart claimed in the two-stage metadata does **not exist**
-   (no regressor artifact in `rain/model/`).
+   regressor counterpart claimed in the two-stage metadata now **ships** at
+   `rain/model/rainfall_regressor_12.pkl` (RandomForestRegressor, 25 features,
+   integrated from the absorbed deployment package); full metric reproduction of
+   the regression stage still requires the (absent) feature-builder script.
 3. **Horizon / alignment**: **same-time** — inputs and target are the same
    half-hour timestamp; no future-predictive capability.
 4. **Data source**: `rain/data/FANI_2019_IMERG_20190430_0000_0600.csv`
@@ -98,32 +100,41 @@ where the evidence needed to reproduce them is absent.
    Only `wind/metadata/wind_normalization.txt`
    (U10 mean/std `1.7262/4.4726`, V10 mean/std `3.1894/4.5187`).
 7. **Split methodology present**: **none** (single case study).
-8. **Artifact status**: `wind/model/wind_model_best.keras` exists (5.2 MB),
-   **NOT LOADABLE in this environment**: `import tensorflow` **hard-aborts the
-   interpreter** (SIGABRT, libc++ mutex failure), verified via subprocess probe.
-   Phase 10 fix: adapter now probes TF import health in a subprocess, and `load()`
-   raises a catchable `RuntimeError` instead of terminating the process.
-9. **Training / inference pipeline**: **neither exists** in the repo.
+8. **Artifact status**: `wind/model/wind_model_best.keras` exists (5.2 MB, SHA-256
+   `53779bf2…5132`); **LOADABLE now — verified (Wind integration)**. The Phase 10
+   subprocess import-health probe is retained: the adapter imports TF in-process
+   only after the probe succeeds, otherwise it raises a catchable `RuntimeError`
+   and reports explicit `UNAVAILABLE` instead of terminating the process.
+9. **Training / inference pipeline**: training pipeline does NOT exist in the repo;
+   a **real inference path is implemented and verified** — `predict_grids()` on
+   caller-supplied U10/V10 grids (documented normalization → model → denormalized
+   m/s fields, `status=AVAILABLE`). `model.predict` runs in an **isolated
+   subprocess** (imports TF before numpy/pandas; on macOS arm64 pandas-before-TF
+   deadlocks in-process predict) which also contains any TF hard-abort.
 10. **Evaluation evidence**: **none** — no metrics anywhere for the wind model.
-11. **Runtime adapter behavior** (Phase 10 fixed): `create_wind_adapter()` no
-    longer crashes; `predict(None)` returns explicit `UNAVAILABLE`
-    (empty `wind_fields`, `confidence=0.0`) when the TF runtime is unusable, or
-    `BASELINE` / "Yaas 2021 case study" when loaded. `validate_input()` → False
-    (needs gridded fields absent from `CycloneState`).
+11. **Runtime adapter behavior**: `create_wind_adapter()` never crashes;
+    `predict(None)` returns honest `BASELINE` (empty `wind_fields`,
+    `confidence=0.0`) when loaded, or explicit `UNAVAILABLE` when the TF runtime
+    is unusable; `predict_grids(grids)` runs real inference and rejects
+    malformed shapes/NaN. `validate_input()` → False (needs gridded fields absent
+    from `CycloneState`).
 12. **Frontend / interface terminology**: **corrected** — `MOCK.ts` wind entry now
     `load/predict/adapter = UNAVAILABLE` with a TF-crash note; `mockWind` status →
     `RUNTIME_REQUIRED`; `ReportsPage` WIND → `BASELINE` with TF note;
     `LiveMonitorPage` wind → `UNAVAILABLE`; `HazardsPage` "WIND FORECAST
     UNAVAILABLE" → "WIND FIELD UNAVAILABLE"; `DashboardPage` unchanged (not in
     the flagged block).
-13. **Honest scientific status**: **CASE STUDY ONLY — NOT RUNNABLE in current
-    environment** (TensorFlow crashes on import; no inference pipeline → cannot
-    run even when TF is healthy).
+13. **Honest scientific status**: **CASE STUDY ONLY** (Yaas 2021, undocumented
+    horizon). Model load / adapter / registry discovery / grid-fed inference are
+    **VERIFIED**; full pipeline output is NOT wired — **no gridded U10/V10
+    provider ships in this repository** and the orchestrator wind step needs
+    upstream trajectory+intensity.
 14. **Retraining required for a real wind-forecast product**: rebuild from
     documented ERA5 inputs with a real training pipeline, scaler, lead-time
     definition, multi-event validation, and a runnable inference recipe.
-15. **Key limitations before Phase 11**: TF runtime instability; no pipeline; no
-    metrics; no input geometry documented; not registered in the orchestrator.
+15. **Key limitations before Phase 12**: no gridded U10/V10 input provider; no
+    documented input grid geometry/orientation; no metrics; orchestrator wind
+    step returns `BASELINE` in the standard DAG.
 
 ---
 
@@ -156,8 +167,9 @@ where the evidence needed to reproduce them is absent.
    timestamps of 2019-05-03 09:30 → 2019-05-04 00:00) is **NOT a temporal
    holdout** — all timestamps are *inside the same event window*; no
    out-of-event generalization exists.
-8. **Artifact status**: `flood/model/flood_xgboost_spatial_holdout.pkl` (raw
-   XGBClassifier, 28 features, classes `[0,1]`) **loads**.
+8. **Artifact status**: `flood/model/flood_xgboost_improved.pkl` (raw
+   XGBClassifier, 28 features, classes `[0,1]`) **loads** (supersedes the
+   historical `flood_xgboost_spatial_holdout.pkl`).
 9. **Training / inference pipeline**: training script present for the spatial
    holdout; adapter inference returns `DATA_UNAVAILABLE` and tolerates a missing
    rainfall prediction (previously crashed; test pinned).
@@ -226,7 +238,7 @@ where the evidence needed to reproduce them is absent.
 | Branch | Real data | Artifact loads | Training code | Evaluation | Inference runnable | Reproducible | Scientific task | Runtime status |
 |---|---|---|---|---|---|---|---|---|
 | Rainfall | 336k rows (FANI 2019 IMERG) | ✅ RF (25 feats) | ✅ script | ✅ metrics reproduce from CSV | partial (adapter, no grid) | ✅ | Same-time heavy/light **classifier** (not forecast) | `AVAILABLE_BASELINE` |
-| Wind | IBTrACS text + PNGs (Yaas) | ❌ TF SIGABRT | ❌ none | ❌ none | ❌ none | ❌ | Single **case study**, horizon undocumented | `UNAVAILABLE` (probe) / `BASELINE` |
+| Wind | no U10/V10 source in repo (IBTrACS text + PNGs, Yaas) | ✅ TF load (probe-guarded; inference in isolated worker) | ❌ none | ❌ none | ✅ grid-fed (`predict_grids`, isolated subprocess) | partial (registry-verified, synthetic grid tests) | Single **case study**, horizon undocumented | `AVAILABLE` (grid-fed) / `BASELINE` (no grids) |
 | Flood | 374 cells × 97 ts (FANI) | ✅ XGB (28 feats) | ✅ script | 🔶 metadata claims only (ROC-AUC 0.80/0.96) | ❌ (needs preprocessing) | ◐ | Static spatial flood-extent **classification** | `DATA_UNAVAILABLE` |
 | Landslide | terrain + rainfall rasters | ❌ no artifact | ❌ none | ❌ none | ❌ none | ❌ | **Static susceptibility** PNG maps | `STATIC_SUSCEPTIBILITY` |
 

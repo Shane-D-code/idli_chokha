@@ -54,13 +54,41 @@ class HazardRiskEngine:
     def __init__(self, config: dict):
         self.config = config
         self.weights = config.get('weights', self.DEFAULT_WEIGHTS)
-        self.risk_thresholds = config.get('risk_thresholds', {
+        self.risk_thresholds = self._normalize_thresholds(
+            config.get('risk_thresholds'))
+
+    @staticmethod
+    def _normalize_thresholds(
+        raw: dict,
+    ) -> dict[RiskLevel, tuple[float, float]]:
+        """Normalize risk thresholds to ``RiskLevel`` keys.
+
+        YAML configs serialize the thresholds with plain string keys (e.g.
+        ``"LOW": [0.15, 0.35]``) while the code defaults use ``RiskLevel``
+        members. Coercing both to members guarantees ``_prob_to_risk`` returns
+        genuine enums — component ``risk_level`` is later read via
+        ``.value``, which would otherwise crash with a plain string.
+        """
+        thresholds: dict[RiskLevel, tuple[float, float]] = {}
+        if raw:
+            for level, bounds in raw.items():
+                if isinstance(level, str):
+                    try:
+                        level = RiskLevel(level)
+                    except ValueError:
+                        continue
+                if isinstance(level, RiskLevel):
+                    try:
+                        thresholds[level] = (float(bounds[0]), float(bounds[1]))
+                    except (TypeError, IndexError, ValueError):
+                        continue
+        return thresholds or {
             RiskLevel.NONE: (0.0, 0.15),
             RiskLevel.LOW: (0.15, 0.35),
             RiskLevel.MODERATE: (0.35, 0.60),
             RiskLevel.HIGH: (0.60, 0.80),
             RiskLevel.EXTREME: (0.80, 1.0),
-        })
+        }
 
     # --- helpers for availability tests ---------------------------------------------------
 

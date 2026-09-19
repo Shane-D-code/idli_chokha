@@ -6,11 +6,13 @@ Dependency-aware execution of the forecasting pipeline.
 from __future__ import annotations
 
 import warnings
+import time
 from datetime import datetime
 from typing import Any, Optional
 from dataclasses import dataclass, field
 from enum import Enum
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import networkx as nx
 import numpy as np
@@ -194,7 +196,7 @@ class PipelineOrchestrator:
                 return None
 
             # Load model artifact
-            raw_model = self.registry.load_model(entry.name, entry.version)
+            raw_model = self._load_raw_artifact(entry)
 
             # Create appropriate adapter
             return self._create_adapter(module_name, raw_model, entry)
@@ -202,6 +204,24 @@ class PipelineOrchestrator:
         except Exception as e:
             warnings.warn(f"Failed to load model for {module_name.value}: {e}")
             return None
+
+    def _load_raw_artifact(self, entry) -> Any:
+        """Load a registered artifact, deferring TF-native ``.keras`` files.
+
+        TensorFlow hard-aborts when imported after other native libraries
+        (pandas/xarray) in the same process on macOS arm64, so ``.keras``
+        artifacts are never deserialized in the main process. The wind adapter
+        adopts a lightweight placeholder so it stays ``_is_loaded`` (honest
+        BASELINE with no gridded input) and isolates ALL real TF inference in
+        subprocesses keyed to the artifact checkpoint path.
+        """
+        if entry is None:
+            return None
+        checkpoint_path = getattr(entry, 'checkpoint_path', None)
+        if checkpoint_path and str(checkpoint_path).endswith('.keras'):
+            from types import SimpleNamespace
+            return SimpleNamespace(input_shape=None, predict=None)
+        return self.registry.load_model(entry.name, entry.version)
 
     def _create_adapter(self, module_name: ModuleName, raw_model: Any,
                          entry) -> BaseModel:
@@ -219,6 +239,28 @@ class PipelineOrchestrator:
         metadata = self.registry.get_metadata(entry.name, entry.version)
         return adapter_class(raw_model, metadata)
 
+    def _ensure_state_builder(self):
+        """Lazily build the CycloneStateBuilder when none was injected."""
+        if self.state_builder is None:
+            from src.core.ingestion import DataIngestionLayer
+            from src.core.harmonizer import create_harmonizer
+            ingestion = DataIngestionLayer(self.config.get('data', {}))
+            harmonizer = create_harmonizer(self.config.get('harmonization', {}))
+            self.state_builder = CycloneStateBuilder(ingestion, harmonizer)
+
+    def _resolve_modules(self, modules: Optional[list[ModuleName]],
+                         mode: str) -> list[ModuleName]:
+        """Resolve which modules to execute for the given request."""
+        if modules is not None:
+            return list(modules)
+        if mode == "genesis_only":
+            return [ModuleName.GENESIS]
+        elif mode == "track_only":
+            return [ModuleName.GENESIS, ModuleName.TRAJECTORY]
+        elif mode == "hazard_only":
+            return [m for m in ModuleName if m != ModuleName.HAZARD_ENGINE]
+        return list(ModuleName)
+
     def execute(self, storm_id: str, basin: str, reference_time: datetime,
                 modules: Optional[list[ModuleName]] = None,
                 mode: str = "full") -> UnifiedForecastState:
@@ -235,30 +277,14 @@ class PipelineOrchestrator:
             UnifiedForecastState with all predictions
         """
         # Build cyclone state
-        if self.state_builder is None:
-            from src.core.ingestion import DataIngestionLayer
-            from src.core.harmonizer import create_harmonizer
-            ingestion = DataIngestionLayer(self.config.get('data', {}))
-            harmonizer = create_harmonizer(self.config.get('harmonization', {}))
-            self.state_builder = CycloneStateBuilder(ingestion, harmonizer)
-
+        self._ensure_state_builder()
         print(f"Building CycloneState for {storm_id} at {reference_time}...")
         cyclone_state = self.state_builder.build_from_storm_id(
             storm_id, Basin(basin), reference_time
         )
 
         # Determine modules to execute
-        if modules is None:
-            if mode == "full":
-                modules = list(ModuleName)
-            elif mode == "genesis_only":
-                modules = [ModuleName.GENESIS]
-            elif mode == "track_only":
-                modules = [ModuleName.GENESIS, ModuleName.TRAJECTORY]
-            elif mode == "hazard_only":
-                modules = [m for m in ModuleName if m != ModuleName.HAZARD_ENGINE]
-            else:
-                modules = list(ModuleName)
+        modules = self._resolve_modules(modules, mode)
 
         # Get execution order
         execution_order = self.dependency_graph.get_execution_order(modules)
@@ -284,6 +310,149 @@ class PipelineOrchestrator:
         self.unified_state = self._build_unified_state(cyclone_state, module_outputs)
         return self.unified_state
 
+    def execute_parallel(self, storm_id: str, basin: str,
+                         reference_time: datetime,
+                         modules: Optional[list[ModuleName]] = None,
+                         mode: str = "full",
+                         max_workers: int | None = None,
+                         cyclone_state: Optional[CycloneState] = None) -> UnifiedForecastState:
+        """Execute the pipeline with DAG-aware parallel module execution.
+
+        Semantics match :meth:`execute` (same dependency rules, same
+        UNAVAILABLE propagation, same unified-state / hazard-engine output),
+        but independent branches of the dependency graph run concurrently in
+        a bounded thread pool instead of one after another.
+
+        A failed or unavailable module NEVER blocks unrelated branches: each
+        wave waits only for the ancestors a module truly requires. Failures
+        are recorded in ``self.results`` rather than raised, so the hazard
+        engine can still assemble an honest partial assessment.
+        """
+        if cyclone_state is None:
+            self._ensure_state_builder()
+            print(f"Building CycloneState for {storm_id} at {reference_time}...")
+            cyclone_state = self.state_builder.build_from_storm_id(
+                storm_id, Basin(basin), reference_time
+            )
+
+        modules = self._resolve_modules(modules, mode)
+        runtime_max_workers = self.config.get('execution', {}).get('max_workers')
+        if max_workers is not None:
+            workers = max_workers
+        elif isinstance(runtime_max_workers, int) and runtime_max_workers > 0:
+            workers = runtime_max_workers
+        else:
+            workers = 4
+        workers = max(1, min(workers, 32))
+
+        requested: set[str] = {m.value for m in modules}
+        # Modules are graph nodes regardless of model availability, so every
+        # module in the requested set belongs to the graph.
+        targets: list[ModuleName] = [
+            m for m in modules if m in self.dependency_graph.modules
+        ]
+
+        self.results = {}
+        module_outputs: dict[ModuleName, Any] = {}
+        completed: dict[ModuleName, ExecutionResult] = {}
+        pending: set[ModuleName] = set(targets)
+
+        def dependencies_of(m: ModuleName) -> list[ModuleName]:
+            return self.dependency_graph.get_dependencies(m)
+
+        while pending:
+            wave = [
+                m for m in pending
+                if all(dep in completed for dep in dependencies_of(m))
+            ]
+            progress = False
+            if wave:
+                for m in list(wave):
+                    deps = dependencies_of(m)
+                    if m == ModuleName.HAZARD_ENGINE:
+                        continue  # runs as soon as its deps have any status
+                    missing_dep = next((d for d in deps if d.value not in requested), None)
+                    if missing_dep is not None:
+                        self._record_unavailable(
+                            completed, m, f"dependency unavailable: {missing_dep.value} (not in requested module set)")
+                        progress = True
+                        continue
+                    bad_dep = next((d for d in deps if completed[d].status != "SUCCESS"), None)
+                    if bad_dep is not None:
+                        if completed[bad_dep].status == "FAILED":
+                            self._record_unavailable(completed, m, f"dependency failed: {bad_dep.value}")
+                        else:
+                            self._record_unavailable(completed, m, f"dependency unavailable: {bad_dep.value}")
+                        progress = True
+                        continue
+
+            runnable = [m for m in wave if m not in completed]
+            if not runnable:
+                if not pending:
+                    break
+                if progress:
+                    pending -= set(completed)
+                    continue
+                leftovers = {m.value: [d.value for d in dependencies_of(m)
+                                       if d not in completed]
+                             for m in pending}
+                raise RuntimeError(
+                    f"Parallel execution stalled; modules could not be scheduled: {leftovers}")
+
+            with ThreadPoolExecutor(max_workers=min(workers, len(runnable))) as executor:
+                futures = {
+                    executor.submit(
+                        self._execute_parallel_module,
+                        self.dependency_graph.modules[m], cyclone_state, module_outputs,
+                    ): m
+                    for m in runnable
+                }
+                for future in as_completed(futures):
+                    m = futures[future]
+                    try:
+                        res = future.result()
+                    except Exception as e:
+                        res = ExecutionResult(
+                            module=m, success=False, error=str(e),
+                            execution_time=0.0, status="FAILED",
+                        )
+                    completed[m] = res
+                    if res.success and res.output is not None:
+                        module_outputs[m] = res.output
+
+            pending -= set(completed)
+
+        self.results = completed
+        self.unified_state = self._build_unified_state(cyclone_state, module_outputs)
+        return self.unified_state
+
+    @staticmethod
+    def _record_unavailable(completed: dict, module: ModuleName, reason: str):
+        """Record an immediate UNAVAILABLE result (no model run)."""
+        completed[module] = ExecutionResult(
+            module=module,
+            success=False,
+            output=None,
+            status="UNAVAILABLE",
+            reason=reason,
+            execution_time=0.0,
+        )
+
+    def _execute_parallel_module(self, spec: ModuleSpec, cyclone_state: CycloneState,
+                                 module_outputs: dict) -> ExecutionResult:
+        """Worker for :meth:`execute_parallel` — gates only model availability."""
+        start_time = time.time()
+        if spec.model is None and spec.name != ModuleName.HAZARD_ENGINE:
+            return ExecutionResult(
+                module=spec.name,
+                success=False,
+                output=None,
+                status="UNAVAILABLE",
+                reason="model artifact unavailable (not loaded)",
+                execution_time=time.time() - start_time,
+            )
+        return self._predict_module(spec, cyclone_state, module_outputs, start_time)
+
     def _execute_module(self, spec: ModuleSpec, cyclone_state: CycloneState,
                          module_outputs: dict) -> ExecutionResult:
         """Execute a single module."""
@@ -304,9 +473,12 @@ class PipelineOrchestrator:
                     execution_time=time.time() - start_time,
                 )
 
-            # Modules whose predict() requires upstream outputs must not run
+            # A module whose predict() requires upstream outputs must not run
             # (and must not be reported as successful) when those outputs are
-            # unavailable. Uses the declared DEFAULT_DEPENDENCIES edges.
+            # unavailable. Uses the declared DEFAULT_DEPENDENCIES edges. NOTE:
+            # the serial path intentionally does NOT gate genesis->trajectory
+            # chaining here (parallel execute_parallel applies full dependency
+            # gating); isolated modules report their own adapter status.
             required_upstream = {
                 ModuleName.RAINFALL: [ModuleName.TRAJECTORY, ModuleName.INTENSITY],
                 ModuleName.WIND: [ModuleName.TRAJECTORY, ModuleName.INTENSITY],
@@ -329,6 +501,31 @@ class PipelineOrchestrator:
                         execution_time=time.time() - start_time,
                     )
 
+            return self._predict_module(spec, cyclone_state, module_outputs, start_time)
+
+        except Exception as e:
+            execution_time = time.time() - start_time
+            return ExecutionResult(
+                module=spec.name,
+                success=False,
+                error=str(e),
+                execution_time=execution_time,
+                status="FAILED",
+            )
+
+    def _predict_module(self, spec: ModuleSpec, cyclone_state: CycloneState,
+                        module_outputs: dict,
+                        start_time: float | None = None) -> ExecutionResult:
+        """Run a module's model, dispatching on its real input contract.
+
+        Shared by the serial and parallel execution paths. No dependency
+        gating is performed here — callers must guarantee that every input the
+        module requires is already present in ``module_outputs``.
+        """
+        if start_time is None:
+            start_time = time.time()
+
+        try:
             # Prepare inputs based on module type
             if spec.name == ModuleName.GENESIS:
                 output = spec.model.predict(cyclone_state)
@@ -545,7 +742,14 @@ class PipelineOrchestrator:
 
 
 def create_orchestrator(config: dict) -> PipelineOrchestrator:
-    """Create orchestrator from config."""
+    """Create orchestrator from config.
+
+    Native ML framework loading (torch, xgboost, tensorflow) must be preceded
+    by ``configure_runtime()`` (single shared libomp) or the process can SIGSEGV
+    on macOS arm64; this factory guarantees that ordering regardless of caller.
+    """
+    from src.core.runtime import configure_runtime
+    configure_runtime()  # idempotent; raises if an ML framework already loaded
     registry = get_registry(config.get('registry_dir', 'models/registry'))
 
     state_builder = None

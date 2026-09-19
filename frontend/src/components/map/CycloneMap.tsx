@@ -1,6 +1,6 @@
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BASE_STYLE,
   FORECAST_COLOR,
@@ -20,9 +20,34 @@ import {
   intensitySize,
   compassFromBearing,
 } from "@/utils/trackGeometry";
+import {
+  buildTrackSegments,
+  buildUncertaintyCone,
+  normalizeTrack,
+  trackValidationLog,
+} from "@/utils/trackModel";
+import type { TrackInput, TrackSegment } from "@/utils/trackModel";
+import { intensityColor } from "@/utils/intensity";
 import type { TrackPoint } from "@/types";
 import { formatIST } from "@/utils/format";
 import { createRoot, type Root } from "react-dom/client";
+
+/**
+ * Validation gate for placing tracked/cyclone geometry on the map.
+ * Coordinates must be finite AND inside valid geographic bounds. The cyclone
+ * marker, focus box and track layers all feed through this so the map can
+ * never be nudged to a fabricated position for visual appeal.
+ */
+function isValidCoordinate(lat: number, lon: number): boolean {
+  return (
+    Number.isFinite(lat) &&
+    Number.isFinite(lon) &&
+    lat >= -90 &&
+    lat <= 90 &&
+    lon >= -180 &&
+    lon <= 180
+  );
+}
 
 export interface HazardLayerData {
   id: string;
@@ -32,11 +57,29 @@ export interface HazardLayerData {
     level: "LOW" | "MODERATE" | "HIGH" | "VERY_HIGH" | "EXTREME";
     name?: string;
   }[];
-  points?: { lat: number; lon: number; level: string; name?: string }[];
+  points?: { lat: number; lon: number; level: string; name?: string; label?: string }[];
+}
+
+export interface HazardPointInfo {
+  layerId: string;
+  layerName?: string;
+  name?: string;
+  level?: string;
+  lat: number;
+  lon: number;
+}
+
+export interface HistoricalTrackPoint {
+  lat: number;
+  lon: number;
+  timestamp: string;
+  windKt?: number;
+  uncertaintyKm?: number;
+  horizonHours?: number;
 }
 
 interface Props {
-  historicalTrack?: { lat: number; lon: number; timestamp: string }[];
+  historicalTrack?: HistoricalTrackPoint[];
   forecast?: TrackPoint[];
   current?: { lat: number; lon: number; name?: string; windKt?: number };
   hazardLayers?: HazardLayerData[];
@@ -44,6 +87,8 @@ interface Props {
   flyTo?: boolean;
   interactive?: boolean;
   onPointSelected?: (point: TrackPoint) => void;
+  /** Called when a hazard-layer point (district / region marker) is clicked. */
+  onHazardPointSelected?: (info: HazardPointInfo) => void;
 
   /** Timeline: selected point index. When set, cyclone moves along trajectory. */
   selectedIdx?: number;
@@ -57,6 +102,17 @@ interface Props {
   showTimeline?: boolean;
   /** Show the simple CURRENT tag on the vortex. */
   showTag?: boolean;
+  /**
+   * Recenter target for the map's own CENTER control and initial framing.
+   * "track" (default) fits the whole observed+forecast path; "cyclone" flies
+   * to the current cyclone position with a top-left shift (700ms, manual only).
+   */
+  recenterMode?: "track" | "cyclone";
+  /**
+   * Track layers to hide: "observed" (observed path), "forecast" (dashed
+   * forecast line), "cone" (uncertainty corridor) or "points" (horizon nodes).
+   */
+  hiddenLayers?: Array<"observed" | "forecast" | "cone" | "points">;
   /** Additional className for the container. */
   className?: string;
   /** Whether this is a "simplified" view (Command Center) with less detail. */
@@ -65,6 +121,16 @@ interface Props {
   debug?: boolean;
   /** Whether the trajectory is simulated/demo data (Section 53). */
   isDemo?: boolean;
+  /** Vertical fit-bounds padding in px. Compact containers should use a small value. */
+  focusPadding?: number;
+  /**
+   * Cinematic mode (TrackForecastTheatre): suppress the map's own legend,
+   * timeline, demo notice, track/cone/hazard layers and click handlers so the
+   * theatre can layer its own composition over the raw map canvas.
+   */
+  cinematic?: boolean;
+  /** Called once the base map + geography are ready (layers can be added). */
+  onMapReady?: (map: maplibregl.Map) => void;
 }
 
 export function CycloneMap({
@@ -75,6 +141,8 @@ export function CycloneMap({
   height,
   flyTo = true,
   interactive = true,
+  onPointSelected,
+  onHazardPointSelected,
   selectedIdx,
   playing = false,
   onIdxChange,
@@ -83,18 +151,33 @@ export function CycloneMap({
   showTag = true,
   className = "map-box",
   simplified = false,
+  recenterMode = "track",
+  hiddenLayers = [],
   debug = false,
   isDemo = false,
+  focusPadding = 70,
+  cinematic = false,
+  onMapReady,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const markerRootRef = useRef<Root | null>(null);
-  const arrowImageRef = useRef<string | null>(null);
   const contourRef = useRef<ContourCanvasSource | null>(null);
   const focusRef = useRef<[[number, number], [number, number]]>(INDIA_EXTENT);
+  const focusPaddingRef = useRef(focusPadding);
+  const focusCycloneRef = useRef<[[number, number], [number, number]] | null>(null);
+  const recenterModeRef = useRef(recenterMode);
   const [loaded, setLoaded] = useState(false);
   const flyToRef = useRef(flyTo);
+  const onMapReadyRef = useRef(onMapReady);
+  onMapReadyRef.current = onMapReady;
+  const onHazardPointRef = useRef(onHazardPointSelected);
+  onHazardPointRef.current = onHazardPointSelected;
+  // Hazard-layer ids that have been materialised on the map (for stale cleanup).
+  const addedHazardIdsRef = useRef<Set<string>>(new Set());
+  // Point-layer ids currently live on the map (queried for hover + click).
+  const hazardPointLayersRef = useRef<string[]>([]);
 
   // Determine the active position — either from timeline selection or from `current` prop
   const allTrackPoints = useMemo(() => {
@@ -118,6 +201,48 @@ export function CycloneMap({
 
   const vortexSize = useMemo(() => intensitySize(activeWindKt), [activeWindKt]);
 
+  // Build the canonical track once: observed history (either the dedicated
+  // `historicalTrack` prop, or negative-horizon points inside `forecast`) plus
+  // every forecast point, normalised by trackModel. Segments/cone/intensity
+  // colours below all derive from this single ordered, validated list.
+  const canonical = useMemo(() => {
+    const history: TrackInput[] =
+      historicalTrack.length > 0
+        ? historicalTrack.map((p, i, arr) => ({
+            timestamp: p.timestamp,
+            horizonHours: p.horizonHours ?? -(arr.length - i),
+            latitude: p.lat,
+            longitude: p.lon,
+            windKt: p.windKt,
+            uncertaintyKm: p.uncertaintyKm,
+            isForecast: false,
+          }))
+        : forecast
+            .filter((p) => p.horizonHours < 0)
+            .map((p) => ({
+              timestamp: p.timestamp,
+              horizonHours: p.horizonHours,
+              latitude: p.latitude,
+              longitude: p.longitude,
+              windKt: p.windKt,
+              uncertaintyKm: p.uncertaintyKm,
+              isForecast: false,
+            }));
+    const input: TrackInput[] = [
+      ...history,
+      ...forecast.map((p) => ({
+        timestamp: p.timestamp,
+        horizonHours: p.horizonHours,
+        latitude: p.latitude,
+        longitude: p.longitude,
+        windKt: p.windKt,
+        uncertaintyKm: p.uncertaintyKm,
+        isForecast: p.isForecast,
+      })),
+    ];
+    return normalizeTrack(input);
+  }, [historicalTrack, forecast]);
+
   const edgePoints = useMemo(() => {
     const pts: { lon: number; lat: number }[] = [];
     if (activeLat != null && activeLon != null) pts.push({ lon: activeLon, lat: activeLat });
@@ -135,6 +260,47 @@ export function CycloneMap({
   useEffect(() => {
     focusRef.current = focus;
   }, [focus]);
+
+  useEffect(() => {
+    focusPaddingRef.current = focusPadding;
+  }, [focusPadding]);
+
+  useEffect(() => {
+    recenterModeRef.current = recenterMode;
+  }, [recenterMode]);
+
+  // Tight bounds around the CURRENT cyclone (used when recenterMode="cyclone").
+  // Kept in a ref so the one-shot RecenterControl can always read the latest value.
+  useEffect(() => {
+    if (current == null || !isValidCoordinate(current.lat, current.lon)) {
+      focusCycloneRef.current = null;
+      return;
+    }
+    const r = 0.04;
+    focusCycloneRef.current = [
+      [current.lon - r, current.lat - r],
+      [current.lon + r, current.lat + r],
+    ];
+  }, [current]);
+
+  // Fly/fit to the recenter target: current cyclone (top-left shift, 700ms) or
+  // the full observed+forecast track. Never re-snap after a manual pan — the
+  // control is the only trigger here (manual refresh).
+  const fitToRecenterTarget = useCallback(
+    (map: maplibregl.Map, duration: number) => {
+      const cyclone = recenterModeRef.current === "cyclone" ? focusCycloneRef.current : null;
+      const cw = map.getContainer().clientWidth || 800;
+      const ch = map.getContainer().clientHeight || 600;
+      map.fitBounds(cyclone ?? focusRef.current, {
+        padding: cyclone
+          ? { left: Math.round(cw * 0.1), top: Math.round(ch * 0.16), right: 60, bottom: 60 }
+          : { top: focusPaddingRef.current, bottom: focusPaddingRef.current, left: 60, right: 60 },
+        maxZoom: 7,
+        duration,
+      });
+    },
+    []
+  );
 
   // ── Map initialization ──
   useEffect(() => {
@@ -160,17 +326,17 @@ export function CycloneMap({
         zoom: 5,
         attributionControl: { compact: true },
       });
-      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
-      map.addControl(
-        new RecenterControl(() => {
-          map.fitBounds(focusRef.current, {
-            padding: { top: 70, bottom: 70, left: 60, right: 60 },
-            maxZoom: 7,
-            duration: 700,
-          });
-        }),
-        "top-right"
-      );
+      // In cinematic mode the forecast theatre owns framing and storm rendering —
+      // no nav/recenter controls, no generic GIS chrome.
+      if (!cinematic) {
+        map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+        map.addControl(
+          new RecenterControl(() => {
+            fitToRecenterTarget(map, 700);
+          }),
+          "top-right"
+        );
+      }
       map.on("load", () => {
         setLoaded(true);
 
@@ -315,12 +481,12 @@ export function CycloneMap({
         };
         map.on("moveend", onMoveEnd);
 
-        if (flyToRef.current) {
-          map.fitBounds(focusRef.current, {
-            padding: { top: 70, bottom: 70, left: 60, right: 60 },
-            maxZoom: 7,
-            duration: 900,
-          });
+        // In cinematic mode the owner (forecast theatre) owns framing and
+        // layers via onMapReady — the base map stays stable and un-fitted.
+        if (cinematic) {
+          onMapReadyRef.current?.(map);
+        } else if (flyToRef.current) {
+          fitToRecenterTarget(map, 900);
         }
       });
       mapRef.current = map;
@@ -341,22 +507,30 @@ export function CycloneMap({
   // ── Fit view when track data changes ──
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !loaded) return;
-    map.fitBounds(focus, {
-      padding: { top: 70, bottom: 70, left: 60, right: 60 },
-      maxZoom: 7,
-      duration: 900,
-    });
+    if (!map || !loaded || cinematic) return;
+    fitToRecenterTarget(map, 900);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded, focus]);
 
   // ── Update vortex marker position (geographic interpolation) ──
+  // Cinematic mode deliberately skips this: the forecast theatre owns its own
+  // geo-scaled storm renderer (positioned with map.project, sized with zoom).
   const lastPosRef = useRef<{ lat: number; lon: number } | null>(null);
   const animFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !loaded || activeLat == null || activeLon == null) return;
+    if (!map || !loaded || cinematic || activeLat == null || activeLon == null) return;
+
+    // Hard validation gate: the marker is positioned ONLY from the real
+    // [lon, lat] in the forecast data — never hand-placed for visuals.
+    if (!isValidCoordinate(activeLat, activeLon)) {
+      console.warn(
+        `CycloneMap: skipping marker — invalid cyclone coordinate [${activeLon}, ${activeLat}]. ` +
+        "Refusing to render a real cyclone at a fabricated position."
+      );
+      return;
+    }
 
     const nextPos = { lat: activeLat, lon: activeLon };
 
@@ -457,63 +631,70 @@ export function CycloneMap({
   // ── Add geo layers (track, forecast, uncertainty) ──
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !loaded) return;
+    if (!map || !loaded || cinematic) return;
+
+    trackValidationLog("CycloneMap", canonical);
 
     const sources = map.getStyle()?.sources ?? {};
 
-    // Historical track line (thin, muted)
-    if (historicalTrack.length > 1) {
-      const line: GeoJSON.Feature<GeoJSON.LineString> = {
-        type: "Feature",
-        properties: {},
-        geometry: {
-          type: "LineString",
-          coordinates: historicalTrack.map((p) => [p.lon, p.lat]),
-        },
-      };
-      if (!sources["hist-line"]) map.addSource("hist-line", { type: "geojson", data: line });
-      else (map.getSource("hist-line") as maplibregl.GeoJSONSource).setData(line);
-      if (!map.getLayer("hist-layer")) {
+    // Observed track (solid) — historical + current, IMD-intensity segments
+    const observedLinePts = canonical.current
+      ? [...canonical.observed, canonical.current]
+      : canonical.observed;
+    const observedSegments = buildTrackSegments(observedLinePts);
+    const observedFeatures = segmentsToFeatures(observedSegments, TRACK_COLOR);
+    if (observedFeatures.length > 0) {
+      const data: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: observedFeatures };
+      if (!sources["track-observed"]) map.addSource("track-observed", { type: "geojson", data });
+      else (map.getSource("track-observed") as maplibregl.GeoJSONSource).setData(data);
+      if (!map.getLayer("track-observed-layer")) {
         map.addLayer({
-          id: "hist-layer",
+          id: "track-observed-layer",
           type: "line",
-          source: "hist-line",
-          layout: { "line-cap": "round" },
-          paint: { "line-color": TRACK_COLOR, "line-width": 2, "line-opacity": 0.7 },
+          source: "track-observed",
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: { "line-color": ["get", "color"], "line-width": 2.5, "line-opacity": 0.95 },
         });
       }
     }
 
-    // Forecast line (stronger, dashed) — only forecast-tagged points
-    const forecastPts = forecast.filter((p) => p.isForecast);
-    if (forecastPts.length > 1) {
-      const line: GeoJSON.Feature<GeoJSON.LineString> = {
-        type: "Feature",
-        properties: {},
-        geometry: {
-          type: "LineString",
-          coordinates: forecastPts.map((p) => [p.longitude, p.latitude]),
-        },
-      };
-      if (!sources["fc-line"]) map.addSource("fc-line", { type: "geojson", data: line });
-      else (map.getSource("fc-line") as maplibregl.GeoJSONSource).setData(line);
-      if (!map.getLayer("fc-layer")) {
+    // Forecast track (dashed) — current + forecast horizons, IMD-intensity segments
+    const forecastLinePts = canonical.current
+      ? [canonical.current, ...canonical.forecast]
+      : canonical.forecast;
+    const forecastSegments = buildTrackSegments(forecastLinePts);
+    const forecastFeatures = segmentsToFeatures(forecastSegments, FORECAST_COLOR);
+    if (forecastFeatures.length > 0) {
+      const data: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: forecastFeatures };
+      if (!sources["track-forecast"]) map.addSource("track-forecast", { type: "geojson", data });
+      else (map.getSource("track-forecast") as maplibregl.GeoJSONSource).setData(data);
+      if (!map.getLayer("track-forecast-layer")) {
         map.addLayer({
-          id: "fc-layer",
+          id: "track-forecast-layer",
           type: "line",
-          source: "fc-line",
-          layout: { "line-cap": "round" },
-          paint: { "line-color": FORECAST_COLOR, "line-width": 3.5, "line-dasharray": [2, 2] },
+          source: "track-forecast",
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: {
+            "line-color": ["get", "color"],
+            "line-width": 3.5,
+            "line-opacity": 0.95,
+            "line-dasharray": [2.4, 2.4],
+          },
         });
       }
     }
 
-    // Uncertainty corridor
-    if (!simplified && forecastPts.length > 1) {
-      const cone = buildCone(forecastPts);
+    // Uncertainty corridor — only when the model actually supplied sigma
+    if (!simplified && forecastLinePts.length >= 3) {
+      const cone = buildUncertaintyCone(forecastLinePts);
       if (cone) {
-        if (!sources["unc-fill"]) map.addSource("unc-fill", { type: "geojson", data: cone });
-        else (map.getSource("unc-fill") as maplibregl.GeoJSONSource).setData(cone);
+        const feature: GeoJSON.Feature<GeoJSON.Polygon> = {
+          type: "Feature",
+          properties: {},
+          geometry: { type: "Polygon", coordinates: [cone.ring] },
+        };
+        if (!sources["unc-fill"]) map.addSource("unc-fill", { type: "geojson", data: feature });
+        else (map.getSource("unc-fill") as maplibregl.GeoJSONSource).setData(feature);
         if (!map.getLayer("unc-fill-layer")) {
           map.addLayer({
             id: "unc-fill-layer",
@@ -531,28 +712,33 @@ export function CycloneMap({
       }
     }
 
-    // Forecast points (small nodes along the track)
-    if (!simplified && forecast.length > 0) {
-      const fc = forecast
-        .filter((p) => p.isForecast)
-        .map((p, i) => ({
-          type: "Feature" as const,
-          properties: { horizon: p.horizonHours, index: i },
-          geometry: {
-            type: "Point" as const,
-            coordinates: [p.longitude, p.latitude],
-          },
-        }));
+    // Forecast points (small nodes along the track) coloured by intensity
+    if (!simplified && canonical.forecast.length > 0) {
+      const fc = canonical.forecast.map((p, i) => ({
+        type: "Feature" as const,
+        properties: {
+          horizon: p.horizonHours,
+          index: i,
+          color: p.windKt != null ? (intensityColor(p.windKt) ?? FORECAST_COLOR) : FORECAST_COLOR,
+          // Only major points carry a label to keep the map uncluttered:
+          // NOW, then every 6h (a 2-hourly grid would read as noise).
+          label:
+            p.horizonHours % 6 === 0
+              ? p.horizonHours === 0
+                ? "NOW"
+                : `+${p.horizonHours}H`
+              : "",
+        },
+        geometry: {
+          type: "Point" as const,
+          coordinates: [p.longitude, p.latitude],
+        },
+      }));
+      const data: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: fc };
       if (!sources["fc-points"]) {
-        map.addSource("fc-points", {
-          type: "geojson",
-          data: { type: "FeatureCollection", features: fc },
-        });
+        map.addSource("fc-points", { type: "geojson", data });
       } else {
-        (map.getSource("fc-points") as maplibregl.GeoJSONSource).setData({
-          type: "FeatureCollection",
-          features: fc,
-        });
+        (map.getSource("fc-points") as maplibregl.GeoJSONSource).setData(data);
       }
       if (!map.getLayer("fc-points-layer")) {
         map.addLayer({
@@ -561,129 +747,244 @@ export function CycloneMap({
           source: "fc-points",
           paint: {
             "circle-radius": 4,
-            "circle-color": FORECAST_COLOR,
+            "circle-color": ["get", "color"],
             "circle-stroke-color": "#0b1017",
             "circle-stroke-width": 1.5,
           },
         });
-      }
-    }
-
-    // Directional arrows along forecast track
-    ensureArrowImage().then((imgId) => {
-      arrowImageRef.current = imgId;
-      if (forecast.length > 1 && !map.getLayer("fc-arrows")) {
         map.addLayer({
-          id: "fc-arrows",
+          id: "fc-labels-layer",
           type: "symbol",
-          source: "fc-line",
+          source: "fc-points",
           layout: {
-            "symbol-placement": "line",
-            "symbol-spacing": 78,
-            "icon-image": imgId,
-            "icon-size": 0.9,
-            "icon-rotation-alignment": "map",
-            "icon-pitch-alignment": "map",
-            "icon-allow-overlap": true,
+            "text-field": ["get", "label"],
+            "text-size": 11,
+            "text-font": ["Noto Sans Regular"],
+            "text-anchor": "top",
+            "text-offset": [0, 1.4],
+            "text-allow-overlap": false,
+            "text-ignore-placement": false,
+          },
+          paint: {
+            "text-color": "#D8E3E9",
+            "text-halo-color": "rgba(7,22,28,0.9)",
+            "text-halo-width": 1.4,
           },
         });
       }
-    });
+    }
 
     // Hazard layers
     hazardLayers.forEach((layer) => {
       const srcId = `hazard-${layer.id}`;
-      if (layer.polygons && layer.polygons.length) {
-        const features = layer.polygons.map((p) => ({
-          type: "Feature" as const,
-          properties: { level: p.level, name: p.name },
-          geometry: { type: "Polygon" as const, coordinates: p.coordinates },
-        }));
-        if (!sources[srcId]) {
-          map.addSource(srcId, {
-            type: "geojson",
-            data: { type: "FeatureCollection", features },
-          });
-        } else {
-          (map.getSource(srcId) as maplibregl.GeoJSONSource).setData({
-            type: "FeatureCollection",
-            features,
-          });
-        }
-        if (!map.getLayer(`${srcId}-fill`)) {
-          map.addLayer({
-            id: `${srcId}-fill`,
-            type: "fill",
-            source: srcId,
-            paint: {
-              "fill-color": [
-                "match",
-                ["get", "level"],
-                "HIGH",
-                "rgba(232,119,46,0.4)",
-                "VERY_HIGH",
-                "rgba(224,71,46,0.5)",
-                "EXTREME",
-                "rgba(207,31,31,0.6)",
-                "MODERATE",
-                "rgba(217,165,32,0.35)",
-                "rgba(47,168,79,0.3)",
-              ],
-            },
-          });
-        }
+      const features: GeoJSON.Feature[] = [];
+      (layer.polygons ?? []).forEach((p) =>
+        features.push({
+          type: "Feature",
+          properties: { level: p.level, name: p.name ?? null },
+          geometry: { type: "Polygon", coordinates: p.coordinates },
+        })
+      );
+      (layer.points ?? []).forEach((p, i) =>
+        features.push({
+          type: "Feature",
+          properties: {
+            level: p.level ?? "MODERATE",
+            name: p.name ?? null,
+            label: p.label ?? "",
+            layerId: layer.id,
+            layerName: layer.name,
+            idx: i,
+          },
+          geometry: { type: "Point", coordinates: [p.lon, p.lat] },
+        })
+      );
+      if (features.length > 0) {
+        const data: GeoJSON.FeatureCollection = { type: "FeatureCollection", features };
+        if (!sources[srcId]) map.addSource(srcId, { type: "geojson", data });
+        else (map.getSource(srcId) as maplibregl.GeoJSONSource).setData(data);
       }
+      if (layer.polygons && layer.polygons.length && !map.getLayer(`${srcId}-fill`)) {
+        map.addLayer({
+          id: `${srcId}-fill`,
+          type: "fill",
+          source: srcId,
+          paint: {
+            "fill-color": [
+              "match",
+              ["get", "level"],
+              "HIGH",
+              "rgba(238,129,49,0.4)",
+              "VERY_HIGH",
+              "rgba(229,83,60,0.5)",
+              "EXTREME",
+              "rgba(217,48,60,0.6)",
+              "MODERATE",
+              "rgba(240,180,41,0.35)",
+              "rgba(78,168,255,0.32)",
+            ],
+          },
+        });
+      }
+      if (layer.points && layer.points.length && !map.getLayer(`${srcId}-points`)) {
+        map.addLayer({
+          id: `${srcId}-points`,
+          type: "circle",
+          source: srcId,
+          paint: {
+            "circle-radius": 5.5,
+            "circle-color": [
+              "match",
+              ["get", "level"],
+              "EXTREME",
+              "#d9303c",
+              "VERY_HIGH",
+              "#e5533c",
+              "HIGH",
+              "#ee8131",
+              "MODERATE",
+              "#f0b429",
+              "LOW",
+              "#4ea8ff",
+              "#7e97ae",
+            ],
+            "circle-stroke-color": "rgba(6,19,31,0.9)",
+            "circle-stroke-width": 1.5,
+          },
+        });
+        // Optional name labels (only points that carry a non-empty `label`).
+        map.addLayer({
+          id: `${srcId}-labels`,
+          type: "symbol",
+          source: srcId,
+          layout: {
+            "text-field": ["coalesce", ["get", "label"], ""],
+            "text-size": 10.5,
+            "text-font": ["Noto Sans Regular"],
+            "text-anchor": "top",
+            "text-offset": [0, 1.3],
+            "text-allow-overlap": false,
+            "text-ignore-placement": true,
+          },
+          paint: {
+            "text-color": "#EAF2F9",
+            "text-halo-color": "rgba(7,22,28,0.92)",
+            "text-halo-width": 1.6,
+          },
+        });
+      }
+      addedHazardIdsRef.current.add(layer.id);
     });
 
-    if (interactive) {
-      map.off("click", handleClick);
-      map.off("mousemove", handleMove);
-      map.on("click", handleClick);
-      map.on("mousemove", handleMove);
+    // Remove hazard sources/layers for ids no longer provided (layer toggles).
+    hazardPointLayersRef.current = [];
+    for (const id of Array.from(addedHazardIdsRef.current)) {
+      const srcId = `hazard-${id}`;
+      const stillPresent = hazardLayers.some((l) => l.id === id);
+      if (!stillPresent) {
+        ["-fill", "-points", "-labels"].forEach((suffix) => {
+          if (map.getLayer(srcId + suffix)) map.removeLayer(srcId + suffix);
+        });
+        if (map.getSource(srcId)) map.removeSource(srcId);
+        addedHazardIdsRef.current.delete(id);
+      } else if (map.getLayer(`${srcId}-points`)) {
+        hazardPointLayersRef.current.push(`${srcId}-points`);
+      }
     }
+
+    if (cinematic || !interactive) return;
+
+    map.off("click", handleClick);
+    map.off("mousemove", handleMove);
+    map.on("click", handleClick);
+    map.on("mousemove", handleMove);
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded, historicalTrack, forecast, hazardLayers, simplified]);
 
-  const ensureArrowImage = async () => {
+  // Apply the LayerControl visibility flags once the relevant layers exist.
+  useEffect(() => {
     const map = mapRef.current;
-    if (!map) return "";
-    if (map.hasImage("track-arrow")) return "track-arrow";
-    const size = 24;
-    const canvas = document.createElement("canvas");
-    canvas.width = size;
-    canvas.height = size;
-    const ctx = canvas.getContext("2d")!;
-    ctx.clearRect(0, 0, size, size);
-    ctx.fillStyle = FORECAST_COLOR;
-    ctx.beginPath();
-    ctx.moveTo(2, 12);
-    ctx.lineTo(18, 12);
-    ctx.lineTo(18, 6);
-    ctx.lineTo(23, 12);
-    ctx.lineTo(18, 18);
-    ctx.lineTo(18, 12);
-    ctx.closePath();
-    ctx.fill();
-    const imageData = ctx.getImageData(0, 0, size, size);
-    map.addImage("track-arrow", imageData);
-    return "track-arrow";
-  };
+    if (!map || !loaded || cinematic) return;
+    const layerIds: Record<string, string[]> = {
+      observed: ["track-observed-layer"],
+      forecast: ["track-forecast-layer"],
+      cone: ["unc-fill-layer", "unc-line-layer"],
+      points: ["fc-points-layer", "fc-labels-layer"],
+    };
+    const hidden = new Set(hiddenLayers);
+    const apply = () => {
+      for (const [key, ids] of Object.entries(layerIds)) {
+        const hKey = key as "observed" | "forecast" | "cone" | "points";
+        for (const id of ids) {
+          if (!map.getLayer(id)) continue;
+          map.setLayoutProperty(id, "visibility", hidden.has(hKey) ? "none" : "visible");
+        }
+      }
+    };
+    let raf = 0;
+    const retry = () => {
+      const present = Object.values(layerIds)
+        .flat()
+        .every((id) => map.getLayer(id));
+      if (present) apply();
+      else raf = window.requestAnimationFrame(retry);
+    };
+    retry();
+    return () => window.cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded, hiddenLayers, historicalTrack, forecast, simplified]);
 
   const handleClick = (e: maplibregl.MapMouseEvent) => {
     const map = mapRef.current;
     if (!map) return;
+    const hazardHits = map.queryRenderedFeatures(e.point, { layers: hazardPointLayersRef.current });
+    if (hazardHits.length) {
+      const props = hazardHits[0].properties as {
+        layerId: string;
+        layerName?: string;
+        name?: string | null;
+        level?: string;
+        idx: number;
+      };
+      const name = props.name ?? undefined;
+      const level = props.level ?? undefined;
+      onHazardPointRef.current?.({
+        layerId: props.layerId,
+        layerName: props.layerName,
+        name,
+        level,
+        lat: e.lngLat.lat,
+        lon: e.lngLat.lng,
+      });
+      const html = [
+        name ? `<div class="map-popup-title">${name}</div>` : "",
+        level ? `<div class="small">Exposure: <b>${String(level).replace(/_/g, " ")}</b></div>` : "",
+        `<div class="mono">${Math.abs(e.lngLat.lat).toFixed(2)}\u00b0${e.lngLat.lat >= 0 ? "N" : "S"} &nbsp;${Math.abs(e.lngLat.lng).toFixed(2)}\u00b0${e.lngLat.lng >= 0 ? "E" : "W"}</div>`,
+      ].join("");
+      showPopup(html, [e.lngLat.lng, e.lngLat.lat]);
+      return;
+    }
     const fcId = map.queryRenderedFeatures(e.point, { layers: ["fc-points-layer"] });
     if (fcId.length) {
       const props = fcId[0].properties as { horizon: number; index: number };
-      const pt = forecast[props.index];
+      const pt = canonical.forecast[props.index];
       if (pt) {
+        onPointSelected?.({
+          timestamp: pt.timestamp ?? "",
+          horizonHours: pt.horizonHours,
+          latitude: pt.latitude,
+          longitude: pt.longitude,
+          windKt: pt.windKt,
+          uncertaintyKm: pt.uncertaintyKm,
+          isForecast: true,
+        });
         const html = [
           `<div class="map-popup-title">Forecast +${pt.horizonHours}h</div>`,
           `<div class="mono">${pt.latitude.toFixed(2)}°N &nbsp;${pt.longitude.toFixed(2)}°E</div>`,
-          `<div class="small muted">${new Date(pt.timestamp).toISOString()}</div>`,
+          `<div class="small muted">${pt.timestamp ? new Date(pt.timestamp).toISOString() : ""}</div>`,
           pt.uncertaintyKm
-            ? `<div class="small">Uncertainty: ±${pt.uncertaintyKm} km (uncalibrated band${isDemo ? ", demo" : ""})</div>`
+            ? `<div class="small">Uncertainty: ±${pt.uncertaintyKm} km</div>`
             : "",
         ].join("");
         showPopup(html, [e.lngLat.lng, e.lngLat.lat]);
@@ -707,7 +1008,7 @@ export function CycloneMap({
   const handleMove = (e: maplibregl.MapMouseEvent) => {
     const map = mapRef.current;
     if (!map) return;
-    const hoverable = ["fc-points-layer"];
+    const hoverable = ["fc-points-layer", ...hazardPointLayersRef.current];
     const feats = map.queryRenderedFeatures(e.point, { layers: hoverable });
     map.getCanvas().style.cursor = feats.length ? "pointer" : "";
   };
@@ -748,7 +1049,7 @@ export function CycloneMap({
     >
       <div className="cv-map-stage" style={{ flex: 1, minHeight: 0, position: "relative", height: height ?? "100%" }}>
         <div ref={containerRef} style={{ position: "absolute", inset: 0 }} />
-        <CycloneLegend simplified={simplified} />
+        {!cinematic && <CycloneLegend simplified={simplified} />}
         {activeLat == null && activeLon == null && (
           <div className="cv-unavailable">
             <span className="cv-unavailable-title">TRAJECTORY DATA UNAVAILABLE</span>
@@ -757,13 +1058,13 @@ export function CycloneMap({
             </span>
           </div>
         )}
-        {isDemo && activeLat != null && (
+        {!cinematic && isDemo && activeLat != null && (
           <div className="cv-demo-notice">DEMO / SIMULATED TRAJECTORY</div>
         )}
       </div>
 
       {/* Timeline bar */}
-      {showTimeline && timelinePoints.length > 0 && (
+      {!cinematic && showTimeline && timelinePoints.length > 0 && (
         <CycloneTimeline
           points={timelinePoints}
           currentIndex={activeIdx}
@@ -780,32 +1081,22 @@ export function CycloneMap({
 
 // ── Helpers ──
 
-function buildCone(points: TrackPoint[]): GeoJSON.Feature<GeoJSON.Polygon> | null {
-  if (points.length < 2) return null;
-  const left: [number, number][] = [];
-  const right: [number, number][] = [];
-  for (let i = 0; i < points.length; i++) {
-    const p = points[i];
-    const kmPerDegLat = 111;
-    const kmPerDegLon = 111 * Math.cos((p.latitude * Math.PI) / 180);
-    // No fallback corridor: when a point carries no uncertainty value the band
-    // simply pinches there instead of fabricating a default +/-10 km radius.
-    const unc = p.uncertaintyKm ?? 0;
-    const latOff = unc / kmPerDegLat;
-    const lonOff = unc / kmPerDegLon;
-    left.push([p.longitude - lonOff * 0.5, p.latitude - latOff * 0.5]);
-    right.push([p.longitude + lonOff * 0.5, p.latitude + latOff * 0.5]);
-  }
-  const ring = [...left, ...right.reverse()].map((c) => [
-    clamp(c[0], -180, 180),
-    clamp(c[1], -90, 90),
-  ]);
-  ring.push(ring[0]);
-  return { type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [ring] } };
-}
-
-function clamp(v: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, v));
+/** One LineString Feature per track segment, coloured by IMD intensity. */
+function segmentsToFeatures(
+  segments: TrackSegment[],
+  fallback: string,
+): GeoJSON.Feature<GeoJSON.LineString>[] {
+  return segments.map((s) => ({
+    type: "Feature",
+    properties: { color: s.color ?? fallback },
+    geometry: {
+      type: "LineString",
+      coordinates: [
+        [s.from.longitude, s.from.latitude],
+        [s.to.longitude, s.to.latitude],
+      ],
+    },
+  }));
 }
 
 // ── Map controls ──

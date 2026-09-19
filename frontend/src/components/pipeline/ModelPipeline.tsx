@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useApp } from "@/state/AppContext";
 import type { ModelInfo } from "@/types";
+import usePipelineEvents from "@/hooks/usePipelineEvents";
 
 /* ============================================================
    TOOFAN Model Pipeline — connected dependency graph.
@@ -41,7 +42,7 @@ const H = 600;
 const LAYOUT: Omit<GraphNode, "detail" | "statusText">[] = [
   { id: "cyclone_state", label: "CYCLONE STATE", abbrev: "STATE", x: 380, y: 46, tone: "input" },
   { id: "genesis", label: "GENESIS", x: 380, y: 126, group: ["genesis"] },
-  { id: "trajectory", label: "TRAJECTORY (V12 DISTILLED)", abbrev: "TRAJECTORY", x: 120, y: 226, route: "/track" },
+  { id: "trajectory", label: "TRAJECTORY V12", abbrev: "TRAJECTORY", x: 120, y: 226, route: "/track" },
   { id: "ri", label: "RI", x: 380, y: 226, route: "/intensity", group: ["ri"] },
   { id: "intensity", label: "INTENSITY", x: 640, y: 226, route: "/intensity" },
   { id: "recurvature", label: "RECURVATURE", x: 120, y: 322, route: "/recurvature" },
@@ -79,9 +80,6 @@ function toneOf(status: string): GraphTone {
     case "LIVE":
       return "ready";
     case "BASELINE":
-    case "AVAILABLE_BASELINE":
-    case "LIMITED":
-    case "STATIC_SUSCEPTIBILITY":
       return "degraded";
     case "DEGRADED":
     case "DATA_REQUIRED":
@@ -90,8 +88,6 @@ function toneOf(status: string): GraphTone {
       return "degraded";
     case "UNAVAILABLE":
     case "MODEL_MISSING":
-    case "DATA_UNAVAILABLE":
-    case "NOT_IMPLEMENTED":
       return "blocked";
     default:
       return "blocked";
@@ -107,6 +103,7 @@ function statusTextOf(status: string): string {
 export function ModelPipeline({ models }: { models: ModelInfo[] }) {
   const { mode } = useApp();
   const [selected, setSelected] = useState<string | null>(null);
+  const { moduleActive, moduleStatus, moduleMeta } = usePipelineEvents();
 
   const bySlug = useMemo(() => {
     const map = new Map<string, ModelInfo[]>();
@@ -154,7 +151,28 @@ export function ModelPipeline({ models }: { models: ModelInfo[] }) {
         }
       }
 
-      return { ...node, tone, statusText, detail, members: members.map((m) => ({ name: m.name, status: m.status })) };
+      // Allow live pipeline events to override node tone (active state + final statuses)
+      const isActive = Boolean(moduleActive[node.id]);
+      let finalTone: GraphTone = isActive ? "active" : tone;
+      const mStatus = moduleStatus[node.id];
+      if (mStatus) {
+        switch (mStatus) {
+          case "AVAILABLE":
+            finalTone = isActive ? "active" : "ready";
+            break;
+          case "DEGRADED":
+          case "BASELINE":
+            finalTone = "degraded";
+            break;
+          case "NOT_AVAILABLE":
+          case "ERROR":
+            finalTone = "blocked";
+            break;
+          default:
+            finalTone = finalTone;
+        }
+      }
+      return { ...node, tone: finalTone, statusText, detail, members: members.map((m) => ({ name: m.name, status: m.status })) };
     };
 
     return LAYOUT.map(resolve);
@@ -211,7 +229,7 @@ export function ModelPipeline({ models }: { models: ModelInfo[] }) {
             />
           ))}
         </svg>
-        {sel && <DetailPanel n={sel} onClose={() => setSelected(null)} />}
+        {sel && <DetailPanel n={sel} onClose={() => setSelected(null)} moduleMeta={moduleMeta} />}
       </div>
 
       <div className="mpg-legend">
@@ -253,14 +271,15 @@ function NodeGroup({ n, selected, onSelect }: { n: GraphNode; selected: boolean;
         rx={NODE_H / 2}
         className={`mpg-node-body ${n.tone} ${selected ? "sel" : ""}`}
       />
-      <text x={n.x} y={n.y - 2} textAnchor="middle" className="mpg-node-label">{n.abbrev ?? n.label}</text>
+      <text x={n.x} y={n.y - 2} textAnchor="middle" className="mpg-node-label">{n.abbrev ?? n.label}{n.tone === "ready" ? " ✓" : ""}</text>
       <text x={n.x} y={n.y + 15} textAnchor="middle" className={`mpg-node-status ${n.tone}`}>{n.statusText}</text>
       {n.tone === "active" && <circle cx={n.x} cy={n.y + 23} r="3" className="mpg-run-dot" />}
     </g>
   );
 }
 
-function DetailPanel({ n, onClose }: { n: GraphNode; onClose: () => void }) {
+function DetailPanel({ n, onClose, moduleMeta }: { n: GraphNode; onClose: () => void; moduleMeta?: Record<string, any> }) {
+  moduleMeta = moduleMeta ?? {};
   return (
     <div className="mpg-pop" onClick={(e) => e.stopPropagation()}>
       <div className="mpg-pop-head">
@@ -276,6 +295,18 @@ function DetailPanel({ n, onClose }: { n: GraphNode; onClose: () => void }) {
               </div>
             ))
           : null}
+        {moduleMeta && moduleMeta[n.id] ? (
+          <div className="mpg-pop-cell">
+            <span className="mpg-pop-lbl">Execution</span>
+            <span className="mpg-pop-val">{moduleMeta[n.id].executionTimeMs ? `${Math.round(moduleMeta[n.id].executionTimeMs)} ms` : "—"}</span>
+          </div>
+        ) : null}
+        {moduleMeta && moduleMeta[n.id]?.reason ? (
+          <div className="mpg-pop-cell">
+            <span className="mpg-pop-lbl">Reason</span>
+            <span className="mpg-pop-val">{moduleMeta[n.id].reason}</span>
+          </div>
+        ) : null}
       </div>
       {n.members && n.members.length > 0 && (
         <div className="mpg-pop-members">

@@ -35,17 +35,21 @@ export default function WindPage() {
   if (loading) return <div className="page"><LoadingState rows={3} /></div>;
 
   const runtimeBlocked = data?.status.status === "RUNTIME_REQUIRED";
+  const unavailable = data?.status.status === "NOT_AVAILABLE" || data?.status.status === "ERROR";
 
   return (
     <div className="page">
       <div className="page-head">
-        <div className="page-kicker">Hazard</div>
+        <div className="page-kicker">Forecast · Hazard</div>
         <h1 className="page-title">Wind</h1>
         <p className="page-sub">Wind field analysis — maximum wind and wind radii by zone.</p>
         <div className="row" style={{ marginTop: "var(--sp-3)" }}>
           {data?.status ? <StatusLabel status={data.status.status} /> : null}
           <DemoBanner />
         </div>
+        {data?.status && (data.status.status === "NOT_AVAILABLE" || data.status.status === "ERROR") && data.status.message ? (
+          <p className="small muted" style={{ marginTop: "var(--sp-2)" }}>Reason: {data.status.message}</p>
+        ) : null}
       </div>
 
       {/* ═══ RUNTIME REQUIRED WARNING ═══ */}
@@ -64,7 +68,7 @@ export default function WindPage() {
 
       {/* ═══ WIND FIELD MAP ═══ */}
       <div className="map-container" style={{ marginBottom: "var(--section-gap)" }}>
-        <div className="map-kicker">WIND FIELD · {runtimeBlocked ? "UNAVAILABLE" : "SIMULATED"}</div>
+        <div className="map-kicker">WIND FIELD · {unavailable ? "UNAVAILABLE" : runtimeBlocked ? "RUNTIME REQUIRED" : "SIMULATED"}</div>
         <MapErrorBoundary title="WIND MAP UNAVAILABLE" height="100%">
           <CycloneMap
             current={
@@ -116,7 +120,7 @@ export default function WindPage() {
               <DataRow label="Status" value={<StatusLabel status={data?.status.status ?? "UNAVAILABLE"} />} />
               <ThinDivider faint />
               <p className="small muted">
-                {data?.message}
+                {data?.status?.message ?? data?.message}
               </p>
             </div>
           </div>

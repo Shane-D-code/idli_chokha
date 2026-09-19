@@ -45,6 +45,27 @@ def _resolve_artifact(path: str, kind: str) -> str:
     )
 
 
+def _resolve_deployment_dir() -> Path:
+    """Resolve the deployment package directory that actually has source.
+
+    The canonical ``cyclone_path_deployment_package/`` may be missing its
+    ``.py`` sources (artifact stripped to bytecode only). The tracked
+    ``cyclone_path_deployment_package_v7b/`` holds the same file skeleton
+    (config / feature_builder / inference / model), so we fall back to it.
+    """
+    candidates = [
+        DEPLOYMENT_DIR,
+        REPO_ROOT / "cyclone_path_deployment_package_v7b",
+    ]
+    for candidate in candidates:
+        if (candidate / "inference.py").is_file():
+            return candidate
+    raise FileNotFoundError(
+        "No cyclone trajectory deployment package source found; tried "
+        + ", ".join(str(p) for p in candidates)
+    )
+
+
 def _load_deployment_inference():
     """Import CycloneInference from the self-contained deployment package.
 
@@ -53,7 +74,7 @@ def _load_deployment_inference():
     the duration of the import. Once loaded, the modules remain cached in
     ``sys.modules`` and the path entry is removed again.
     """
-    pkg_dir = str(DEPLOYMENT_DIR)
+    pkg_dir = str(_resolve_deployment_dir())
     inserted = pkg_dir not in sys.path
     if inserted:
         sys.path.insert(0, pkg_dir)

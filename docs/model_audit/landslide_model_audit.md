@@ -47,7 +47,7 @@ filename scan for `landslide|slide|suscept|slope`.
 | 18 | `cyclone_backup/models/satellite_cnn.pt` | RI | PyTorch CNN — *not* landslide |
 | 19–22 | `cyclone_backup/models/*.keras` (satellite + TCIR) | RI | Keras — *not* landslide |
 | 23 | `cyclone_backup/models/xgboost_IMD_only_baseline.pkl` | RI | XGBoost, 12 IMD features — *not* landslide |
-| 24 | `flood/model/flood_xgboost_spatial_holdout.pkl` | Flood | XGBoost, 28 rainfall/hydro/water-distance features — *not* landslide |
+| 24 | `flood/model/flood_xgboost_improved.pkl` (historical `flood_xgboost_spatial_holdout.pkl` superseded) | Flood | XGBoost, 28 rainfall/hydro/water-distance features — *not* landslide |
 | 25 | `rain/model/rainfall_classifier_12.pkl` | Rainfall | RandomForest, 25 rainfall/cyclone features — *not* landslide |
 | 26 | `recurvature/scaler.joblib` | Recurvature | StandardScaler (12 features) — *not* landslide |
 | 27–28 | `wind/model/wind_model_best.keras`, `wind_model.keras` | Wind | Keras — *not* landslide |

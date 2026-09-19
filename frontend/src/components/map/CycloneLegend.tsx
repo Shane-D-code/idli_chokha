@@ -1,6 +1,13 @@
 /**
  * CycloneLegend — compact track legend for the cyclone map overlay.
+ *
+ * Track colour is driven exclusively by IMD wind intensity (7 grades), so the
+ * legend shows the full IMD scale. Observed track is a solid line, forecast a
+ * dashed line; the uncertainty polygon is only drawn when the model provided
+ * real sigma.
  */
+
+import { INTENSITY_CLASS_LIST } from "@/utils/intensity";
 
 export interface CycloneLegendProps {
   simplified?: boolean;
@@ -25,7 +32,7 @@ export function CycloneLegend({ simplified = false }: CycloneLegendProps) {
       {!simplified && (
         <div className="cv-legend-row">
           <span className="cv-legend-swatch uncertainty" aria-hidden="true" />
-          <span>Uncertainty band (uncalibrated bound)</span>
+          <span>Uncertainty (±km)</span>
         </div>
       )}
       <div className="cv-legend-row">
@@ -33,6 +40,19 @@ export function CycloneLegend({ simplified = false }: CycloneLegendProps) {
         <span>Movement</span>
       </div>
       <div className="cv-legend-divider" />
+      <div className="cv-legend-title">IMD INTENSITY</div>
+      <div className="cv-legend-scale" role="img" aria-label="IMD cyclone intensity scale">
+        {INTENSITY_CLASS_LIST.map((c) => (
+          <span
+            key={c.key}
+            className="cv-legend-chip"
+            style={{ background: c.color }}
+            title={`${c.label} · ${c.windRange}`}
+          >
+            {c.shortLabel}
+          </span>
+        ))}
+      </div>
       <div className="cv-legend-row cv-legend-texture">
         <span className="cv-legend-swatch texture" aria-hidden="true" />
         <span>Atmospheric Field</span>

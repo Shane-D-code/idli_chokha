@@ -21,6 +21,16 @@ from src.core.ingestion import DataIngestionLayer
 from src.core.harmonizer import DataHarmonizer, create_harmonizer
 
 
+def _clean_scalar(value):
+    """Coerce NaN/missing scalars to None so Pydantic bounded fields accept them."""
+    try:
+        if value is None or pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        return value
+    return value
+
+
 class CycloneStateBuilder:
     """Builds validated CycloneState from multi-source data."""
 
@@ -45,7 +55,7 @@ class CycloneStateBuilder:
         """
         # Load historical track
         history = self.ingestion.load_cyclone_history(
-            storm_id, basin, lookback_hours
+            storm_id, basin, lookback_hours, reference_time
         )
 
         # Filter to times <= reference_time
@@ -78,11 +88,11 @@ class CycloneStateBuilder:
             'timestamp': reference_time,
             'latitude': float(latest['latitude']),
             'longitude': float(latest['longitude']),
-            'max_wind_kt': latest.get('max_wind_kt'),
-            'central_pressure_hpa': latest.get('central_pressure_hpa'),
+            'max_wind_kt': _clean_scalar(latest.get('max_wind_kt')),
+            'central_pressure_hpa': _clean_scalar(latest.get('central_pressure_hpa')),
             'category': latest.get('category'),
-            'heading_deg': latest.get('heading_deg'),
-            'translation_speed_kt': latest.get('translation_speed_kt'),
+            'heading_deg': _clean_scalar(latest.get('heading_deg')),
+            'translation_speed_kt': _clean_scalar(latest.get('translation_speed_kt')),
             **derived,
             'environmental': era5_data or {},
             'ocean': ocean_features or {},
@@ -118,7 +128,7 @@ class CycloneStateBuilder:
                 past_wind = past.iloc[-1].get('max_wind_kt')
                 curr_wind = current.get('max_wind_kt')
                 if past_wind is not None and curr_wind is not None:
-                    derived[f'wind_change_{hours}h'] = float(curr_wind - past_wind)
+                    derived[f'wind_change_{hours}h'] = _clean_scalar(float(curr_wind - past_wind))
                 else:
                     derived[f'wind_change_{hours}h'] = None
             else:
@@ -132,7 +142,7 @@ class CycloneStateBuilder:
                 past_pres = past.iloc[-1].get('central_pressure_hpa')
                 curr_pres = current.get('central_pressure_hpa')
                 if past_pres is not None and curr_pres is not None:
-                    derived[f'pressure_change_{hours}h'] = float(curr_pres - past_pres)
+                    derived[f'pressure_change_{hours}h'] = _clean_scalar(float(curr_pres - past_pres))
                 else:
                     derived[f'pressure_change_{hours}h'] = None
             else:
@@ -142,7 +152,7 @@ class CycloneStateBuilder:
         if 'translation_speed_kt' in history.columns:
             speed_series = history['translation_speed_kt'].dropna()
             if len(speed_series) >= 2:
-                derived['acceleration'] = float(speed_series.iloc[-1] - speed_series.iloc[-2])
+                derived['acceleration'] = _clean_scalar(float(speed_series.iloc[-1] - speed_series.iloc[-2]))
             else:
                 derived['acceleration'] = None
         else:

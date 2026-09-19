@@ -56,6 +56,36 @@ class DataQualityFlag(str, Enum):
     SUSPECT = "SUSPECT"
 
 
+class ProviderStatus(str, Enum):
+    """Runtime status of a data provider.
+
+    ``AVAILABLE``: real data was fetched and validated.
+    ``DEGRADED``: partial data (missing fields, stale, coverage gaps).
+    ``NOT_AVAILABLE``: no source exists in this deployment (honest absence).
+    ``ERROR``: the source exists but failed during fetch/validation.
+    """
+    AVAILABLE = "AVAILABLE"
+    DEGRADED = "DEGRADED"
+    NOT_AVAILABLE = "NOT_AVAILABLE"
+    ERROR = "ERROR"
+
+
+class HazardStatus(str, Enum):
+    """Unified per-hazard output status vocabulary.
+
+    ``AVAILABLE``: a real model output was produced.
+    ``DEGRADED``: produced, but with missing/partial inputs or caveats.
+    ``BASELINE``: a documented baseline/case-study output (no verified model ran).
+    ``NOT_AVAILABLE``: could not run (artifact missing or upstream unavailable).
+    ``ERROR``: an exception occurred during execution.
+    """
+    AVAILABLE = "AVAILABLE"
+    DEGRADED = "DEGRADED"
+    BASELINE = "BASELINE"
+    NOT_AVAILABLE = "NOT_AVAILABLE"
+    ERROR = "ERROR"
+
+
 class ImputationRecord(BaseModel):
     """Record of imputation applied to a field."""
     field_name: str
@@ -573,6 +603,81 @@ class UnifiedForecastState(BaseModel):
         # arrays; without an encoder the JSON dump raises
         # PydanticSerializationError (demonstrated in Phase 11). Converting to
         # nested lists is lossless.
+        json_encoders = {
+            np.ndarray: lambda v: v.tolist(),
+        }
+
+
+class ProviderSource(BaseModel):
+    """Provenance record for a single provider fetch in a pipeline run."""
+    name: str
+    dataset: str | None = None
+    source_path: str | None = None
+    retrieved_at: datetime = Field(default_factory=datetime.utcnow)
+    observation_timestamp: datetime | None = None
+    is_stale: bool = False
+    latency_ms: float = 0.0
+    status: ProviderStatus = ProviderStatus.AVAILABLE
+    warnings: list[str] = Field(default_factory=list)
+    detail: str | None = None
+
+
+class PipelineRunRequest(BaseModel):
+    """Client request to execute the forecasting pipeline."""
+    storm_id: str = Field(..., min_length=1, description="Storm identifier")
+    basin: Basin = Field(..., description="Ocean basin (e.g. 'BOB', 'AS', 'NI')")
+    reference_time: datetime = Field(..., description="Forecast initialization time (UTC)")
+    latitude: float | None = Field(None, ge=-90, le=90, description="Optional requested location (lat)")
+    longitude: float | None = Field(None, ge=-180, le=180, description="Optional requested location (lon)")
+    modules: list[str] | None = Field(
+        None, description="Subset of modules to run (None = full graph)")
+    mode: str = Field("full", pattern="^(full|genesis_only|track_only|hazard_only)$")
+    request_id: str | None = Field(None, description="Optional client-supplied run id")
+    max_workers: int | None = Field(None, ge=1, le=32, description="Parallelism cap")
+    labels: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator('reference_time', mode='before')
+    @classmethod
+    def parse_reference_time(cls, v):
+        if isinstance(v, str):
+            return datetime.fromisoformat(v.replace('Z', '+00:00'))
+        return v
+
+
+class PipelineRunResult(BaseModel):
+    """Envelope returned by the pipeline service for one run.
+
+    Wraps the ``UnifiedForecastState`` produced by the orchestrator together
+    with run lifecycle metadata, an honest per-hazard status map, and the
+    provenance of every provider fetch that fed the run. Never fabricates:
+    a module with no artifact or no data reports NOT_AVAILABLE.
+    """
+    request_id: str
+    run_id: str
+    generated_at: datetime = Field(default_factory=datetime.utcnow)
+    pipeline_status: str = Field(
+        ...,
+        description="COMPLETED when the graph finished (even with unavailable modules); "
+                    "PARTIAL when interrupted; FAILED on fatal exception",
+    )
+    assessment: UnifiedForecastState | None = Field(
+        ...,
+        description="Unified forecast state; None only when the run itself failed "
+                    "before the graph executed",
+    )
+    per_hazard_status: dict[str, str] = Field(
+        ...,
+        description="HazardStatus token per model module: "
+                    "AVAILABLE/DEGRADED/BASELINE/NOT_AVAILABLE/ERROR",
+    )
+    per_hazard_reasons: dict[str, str] = Field(default_factory=dict)
+    provider_sources: list[ProviderSource] = Field(default_factory=list)
+    stage_latency_ms: dict[str, float] = Field(default_factory=dict)
+    total_latency_ms: float = Field(default_factory=float)
+    warnings: list[str] = Field(default_factory=list)
+
+    class Config:
+        arbitrary_types_allowed = True
         json_encoders = {
             np.ndarray: lambda v: v.tolist(),
         }

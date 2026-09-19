@@ -208,7 +208,7 @@ export function RecurvatureMap({
       opacity: 0.9,
     });
 
-    // ── Actual model forecast + uncertainty band ───────────
+    // ── Actual model forecast + uncertainty cone ───────────
     if (forecast.length > 1) {
       const cone = buildCone(forecast);
       if (cone) {
@@ -606,9 +606,7 @@ function buildCone(points: RecurvatureTrackPoint[]): GeoJSON.Feature<GeoJSON.Pol
   for (const p of points) {
     const kmPerDegLat = 111;
     const kmPerDegLon = 111 * Math.cos((p.lat * Math.PI) / 180);
-    // No fallback corridor: a missing uncertainty value pinches the band there
-    // instead of fabricating a default +/-10 km radius.
-    const unc = p.uncertaintyKm ?? 0;
+    const unc = p.uncertaintyKm ?? 20;
     const latOff = unc / kmPerDegLat;
     const lonOff = unc / kmPerDegLon;
     left.push([p.lon - lonOff * 0.5, p.lat - latOff * 0.5]);

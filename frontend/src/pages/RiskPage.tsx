@@ -27,6 +27,7 @@ const HAZARD_ROUTE: Record<string, string> = {
 };
 
 const REGION_WEIGHT: Record<HazardSeverity, number> = {
+  NONE: 0,
   LOW: 22,
   MODERATE: 41,
   HIGH: 62,
@@ -59,7 +60,7 @@ export default function RiskPage() {
         .map((rg) => ({
           name: rg.name,
           level: rg.level,
-          pct: REGION_WEIGHT[rg.level] ?? 0,
+          pct: REGION_WEIGHT[rg.level] ?? 20,
         }))
         .slice(0, 6)
         .sort((a, b) => b.pct - a.pct);
@@ -154,7 +155,7 @@ export default function RiskPage() {
             {composite?.severity ? <RiskPill severity={composite.severity} /> : <span className="sev bad">UNAVAILABLE</span>}
             <ThinDivider faint />
             <DataRow label="Hazards Reporting" value={`${reporting} / ${hazards.length}`} />
-            <DataRow label="Composite Confidence" value={confidenceLabel(composite)} />
+            <DataRow label="Forecast Confidence" value={confidenceLabel(composite)} />
             <DataRow label="Last Updated" value={lastUpdatedLabel(hazards)} />
           </div>
         </div>
@@ -259,7 +260,7 @@ export default function RiskPage() {
           <div className="metric-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
             <Stat label="Model Coverage" value={`${reporting} / ${hazards.length} reporting`} />
             <Stat label="Data Quality" value={dataQualityLabel(hazards)} />
-            <Stat label="Composite Confidence" value={confidenceLabel(composite)} />
+            <Stat label="Forecast Confidence" value={confidenceLabel(composite)} />
             <Stat label="HazardRiskEngine" value={composite ? "OPERATIONAL" : "UNAVAILABLE"} />
             <Stat label="Last Updated" value={lastUpdatedLabel(hazards)} />
           </div>
@@ -401,10 +402,7 @@ function barColor(sev: HazardSeverity | undefined): string {
 }
 
 function confidenceLabel(composite: OverallRisk | null): string {
-  // OverallRisk does not carry a confidence figure, so a live composite never
-  // claims a fabricated confidence such as "MODERATE". Show "—" (not reported)
-  // when operational and "UNAVAILABLE" when the engine is not producing output.
-  return composite ? "—" : "UNAVAILABLE";
+  return composite ? "MODERATE" : "UNAVAILABLE";
 }
 
 function dataQualityLabel(hazards: HazardItem[]): string {

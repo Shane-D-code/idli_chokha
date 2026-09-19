@@ -37,9 +37,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         toofanService.getAlerts(),
       ]);
       if (cancelled) return;
-      setSystem(sys);
-      setAlerts(al);
-      setUnread(al.filter((a) => a.severity !== "INFO").length);
+      setSystem(sys as any);
+      const alertsArr = al as Alert[];
+      setAlerts(alertsArr);
+      setUnread(alertsArr.filter((a: Alert) => a.severity !== "INFO").length);
     })();
     return () => {
       cancelled = true;

@@ -605,8 +605,27 @@ def create_harmonizer(config: Optional[dict] = None) -> DataHarmonizer:
     """Create harmonizer from config dict."""
     if config is None:
         return DataHarmonizer()
-    hc = HarmonizationConfig(**config)
+    hc = HarmonizationConfig(**_coerce_harmonization_config(config))
     return DataHarmonizer(hc)
+
+
+def _coerce_harmonization_config(config: dict) -> dict:
+    """Reconcile the documented YAML keys (``*_hours``) with the canonical
+    dataclass fields (``timedelta``) so both spellings load cleanly."""
+    cfg = dict(config)
+    if "max_interpolation_gap_hours" in cfg:
+        cfg["max_interpolation_gap"] = timedelta(
+            hours=float(cfg.pop("max_interpolation_gap_hours")))
+    if "extrapolation_limit_hours" in cfg:
+        cfg["extrapolation_limit"] = timedelta(
+            hours=float(cfg.pop("extrapolation_limit_hours")))
+    for key in ("max_interpolation_gap", "extrapolation_limit"):
+        if key in cfg and not isinstance(cfg[key], timedelta):
+            try:
+                cfg[key] = timedelta(hours=float(cfg[key]))
+            except (TypeError, ValueError):
+                pass
+    return cfg
 
 
 def validate_no_future_data(df: pd.DataFrame, time_col: str,

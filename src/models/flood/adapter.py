@@ -176,10 +176,16 @@ class ModelAdapter(FloodModelAdapter):
 
 
 def create_flood_adapter(
-    checkpoint_path: str = "flood/model/flood_xgboost_spatial_holdout.pkl",
-    model_version: str = "baseline"
+    checkpoint_path: str = "flood/model/flood_xgboost_improved.pkl",
+    model_version: str = "improved"
 ) -> FloodModelAdapter:
-    """Factory function to create flood adapter."""
+    """Factory function to create flood adapter.
+
+    Uses the Toofan Flood "improved" XGBoost artifact (`flood_xgboost_improved.pkl`),
+    which carries reproducible spatial-holdout and temporal-validation metrics
+    (see ``flood/metadata/flood_model_metadata.json``). The historical
+    `flood_xgboost_spatial_holdout.pkl` artifact is superseded.
+    """
     model_info = ModelInfo(
         name="flood_xgb",
         version=model_version,

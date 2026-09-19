@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import type { ReactNode } from "react";
 import { AppFooter } from "./AppFooter";
-import { Header } from "./Header";
-import { Sidebar } from "./Sidebar";
+import { TopBar } from "./TopBar";
+import { RailSidebar } from "./RailSidebar";
+import { PipelineStatusStrip } from "./PipelineStatusStrip";
 
 interface Props {
   children: ReactNode;
@@ -19,12 +20,15 @@ export function AppShell({ children }: Props) {
 
   return (
     <div className="app-shell">
-      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <Header onOpenSidebar={() => setSidebarOpen(true)} />
+      <RailSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <TopBar onOpenSidebar={() => setSidebarOpen(true)} />
       <main className="app-main">
+        <PipelineStatusStrip className="mb-4" />
         {children}
         <AppFooter />
       </main>
     </div>
   );
 }
+
+export default AppShell;

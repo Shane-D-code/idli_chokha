@@ -1,0 +1,102 @@
+/* ============================================================
+   TOOFAN Ops Dashboard — shell + hero auxiliary styles
+   Complements tailwind.css utilities (see Tailwind classes in
+   components). Handles layout grid placement, the 72px icon
+   rail, the 56px top bar and mobile behaviour.
+   ============================================================ */
+
+/* ---- Rail sidebar — glassy translucent navbar ---- */
+.ops-rail {
+  grid-area: nav;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  z-index: 60;
+  background: rgba(8, 24, 41, 0.55);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border-right: 1px solid rgba(126, 190, 225, 0.16);
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.03);
+}
+
+.ops-rail::-webkit-scrollbar { width: 3px; }
+.ops-rail::-webkit-scrollbar-track { background: transparent; }
+.ops-rail::-webkit-scrollbar-thumb { background: rgba(126, 190, 225, 0.16); border-radius: 2px; }
+
+/* ---- Top bar — glassy translucent navbar ---- */
+.ops-topbar {
+  grid-area: header;
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 18px;
+  height: var(--header-h);
+  background: linear-gradient(180deg, rgba(13, 35, 55, 0.5), rgba(6, 19, 31, 0.42));
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border-bottom: 1px solid rgba(126, 190, 225, 0.16);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), inset 0 -1px 0 rgba(255, 255, 255, 0.02);
+}
+
+.ops-topbar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  color: #7e97ae;
+  background: transparent;
+  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+}
+.ops-topbar-btn:hover {
+  background: rgba(126, 190, 225, 0.1);
+  color: #c3d4e4;
+  border-color: var(--line-soft, rgba(126, 190, 225, 0.22));
+}
+
+/* ---- Mobile: rail slides in over content ---- */
+@media (max-width: 767px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+  .ops-rail {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    height: 100vh;
+    transform: translateX(-100%);
+    transition: transform 0.22s ease;
+    z-index: 170;
+    box-shadow: 12px 0 32px rgba(0, 0, 0, 0.45);
+  }
+  .ops-rail.open {
+    transform: none;
+  }
+  .ops-topbar {
+    padding: 0 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ops-rail { transition: none; }
+}
+
+/* ---- Hero globe canvas gets a soft ocean-cyan radial aura behind it ---- */
+.ops-hero-globe::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(120% 90% at 30% 100%, rgba(53, 207, 227, 0.15) 0%, rgba(6, 19, 31, 0) 45%),
+    linear-gradient(to top, rgba(6, 19, 31, 0.5) 0%, rgba(6, 19, 31, 0) 34%);
+}

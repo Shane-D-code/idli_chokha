@@ -5,6 +5,16 @@ import type { TrackPoint } from "@/types";
 
 const DEG = 180 / Math.PI;
 const RAD = Math.PI / 180;
+const EARTH_RADIUS_KM = 6371;
+
+/** Great-circle distance between two lat/lon points, in km (haversine). */
+export function haversineKm(a: { lat: number; lon: number }, b: { lat: number; lon: number }): number {
+  const dLat = (b.lat - a.lat) * RAD;
+  const dLon = (b.lon - a.lon) * RAD;
+  const s =
+    Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * RAD) * Math.cos(b.lat * RAD) * Math.sin(dLon / 2) ** 2;
+  return EARTH_RADIUS_KM * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
+}
 
 /** Calculate initial bearing from point A to point B (degrees, 0=N, clockwise). */
 export function bearing(a: { lat: number; lon: number }, b: { lat: number; lon: number }): number {
@@ -20,6 +30,37 @@ export function bearing(a: { lat: number; lon: number }, b: { lat: number; lon: 
 export function compassFromBearing(deg: number): string {
   const dirs = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
   return dirs[Math.round(deg / 22.5) % 16];
+}
+
+/**
+ * Destination point at `bearingDeg` (0=N, clockwise) and `distanceKm` away from
+ * a start point, via the haversine (great-circle) forward formula.
+ */
+export function destinationPoint(
+  start: { lat: number; lon: number },
+  bearingDeg: number,
+  distanceKm: number,
+): { lat: number; lon: number } {
+  const R = 6371;
+  const lat1 = start.lat * RAD;
+  const lon1 = start.lon * RAD;
+  const theta = bearingDeg * RAD;
+  const delta = distanceKm / R;
+
+  const lat2 = Math.asin(
+    Math.sin(lat1) * Math.cos(delta) + Math.cos(lat1) * Math.sin(delta) * Math.cos(theta),
+  );
+  const lon2 =
+    lon1 +
+    Math.atan2(
+      Math.sin(theta) * Math.sin(delta) * Math.cos(lat1),
+      Math.cos(delta) - Math.sin(lat1) * Math.sin(lat2),
+    );
+
+  return {
+    lat: lat2 * DEG,
+    lon: (((lon2 * DEG) + 540) % 360) - 180,
+  };
 }
 
 /**
