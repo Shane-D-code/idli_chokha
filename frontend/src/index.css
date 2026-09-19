@@ -1,0 +1,387 @@
+@import "tailwindcss";
+
+@theme {
+  /* ============================================================
+     TOOFAN · meteorological archive design system
+     Warm cream canvas · paper objects · editorial serif · sky blue
+     ============================================================ */
+
+  /* ---- Cream canvas (backgrounds) ---- */
+  --color-fog: #f5f0e8; /* warm ivory · default page */
+  --color-parcel: #efe8dc; /* deeper cream · alt sections */
+  --color-parchment: #f8f4ec; /* light cream · read areas */
+  --color-cloud: #fffdf9; /* warm white · paper surface */
+  --color-sky: #ecf3f8; /* pale sky blue */
+  --color-mist: #eef3f7; /* very pale sky — keeps legacy bg-mist behind maps */
+  --color-atlas: #e7e2d8; /* warm stone · borders / wells */
+  --color-linen: #faf6ee; /* inner paper well */
+
+  /* ---- Ink (text) — deep brown / charcoal, never pure black ---- */
+  --color-ink-950: #1b1613;
+  --color-ink-900: #211c1a;
+  --color-ink-800: #2c2622;
+  --color-ink-700: #3a332c;
+  --color-ink-600: #4f473f;
+  --color-ink-500: #655f58;
+  --color-ink-400: #857e74;
+  --color-ink-300: #a8a198;
+  --color-ink-200: #cfc9c0;
+  --color-ink-100: #e8e3da;
+
+  /* ---- Ocean ramp remapped to warm neutral "ink" family ---- */
+  --color-ocean-950: #1b1613;
+  --color-ocean-900: #211c1a;
+  --color-ocean-800: #2c2622;
+  --color-ocean-700: #3a332c;
+  --color-ocean-600: #4f473f;
+  --color-ocean-500: #655f58;
+  --color-ocean-400: #857e74;
+  --color-ocean-300: #a8a198;
+  --color-ocean-200: #d4cec4;
+  --color-ocean-100: #ebe6dc;
+
+  /* ---- Scientific accent — sky blue / cyan ---- */
+  --color-brand-700: #0f5f86;
+  --color-brand-600: #19799f;
+  --color-brand-500: #2f92b8;
+  --color-brand-400: #63aeca;
+  --color-brand-300: #9ccfe2;
+  --color-brand-200: #c4e2ef;
+  --color-brand-100: #e6f2f8;
+  --color-brand-50: #f2f8fc;
+
+  /* ---- Warning — muted amber ---- */
+  --color-warn-600: #b97427;
+  --color-warn-500: #d9973f;
+  --color-warn-400: #e6b062;
+  --color-warn-100: #f9efdd;
+
+  /* ---- Danger — coral / red ---- */
+  --color-severe-600: #cf4a3c;
+  --color-severe-500: #e2604f;
+  --color-severe-400: #ea8274;
+  --color-severe-100: #fbe6e2;
+
+  /* ---- Safe — soft green ---- */
+  --color-safe-600: #3c8656;
+  --color-safe-500: #4c9b66;
+  --color-safe-400: #74b68a;
+  --color-safe-100: #e3f0e6;
+
+  /* ---- Warm brown used on amber badges ---- */
+  --color-haze-700: #6b4a1f;
+  --color-haze-500: #93632a;
+
+  /* ---- Type ---- */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif: "Instrument Serif", ui-serif, Georgia, "Times New Roman", serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  /* ---- Physical paper shadows (soft, natural) ---- */
+  --shadow-soft: 0 1px 2px rgb(60 42 24 / 0.05), 0 6px 18px -10px rgb(60 42 24 / 0.18);
+  --shadow-float: 0 2px 4px rgb(60 42 24 / 0.04), 0 16px 40px -20px rgb(60 42 24 / 0.26);
+  --shadow-pop: 0 4px 12px rgb(60 42 24 / 0.07), 0 26px 60px -22px rgb(60 42 24 / 0.3);
+  --shadow-stamp: 0 1px 3px rgb(60 42 24 / 0.08), inset 0 1px 0 rgb(255 255 255 / 0.6);
+
+  /* ---- Animation ---- */
+  --animate-drift: drift 140s linear infinite;
+  --animate-drift-slow: drift 220s linear infinite;
+  --animate-cloud-fade: cloud-fade 7s ease-in-out infinite;
+  --animate-cyclone-spin: cyclone-spin 100s linear infinite;
+  --animate-cyclone-spin-rev: cyclone-spin-rev 80s linear infinite;
+  --animate-pulse-soft: pulse-soft 3.2s ease-in-out infinite;
+  --animate-dash-roll: dash-roll 40s linear infinite;
+  --animate-bob: bob 6s ease-in-out infinite;
+
+  --radius-xl: 1.1rem;
+  --radius-2xl: 1.4rem;
+}
+
+@keyframes drift {
+  from { transform: translateX(-12%); }
+  to { transform: translateX(12%); }
+}
+
+@keyframes cloud-fade {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 0.9; }
+}
+
+@keyframes cyclone-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes cyclone-spin-rev {
+  from { transform: rotate(360deg); }
+  to { transform: rotate(0deg); }
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+@keyframes dash-roll {
+  to { stroke-dashoffset: -48; }
+}
+
+@keyframes bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 5.5rem;
+  }
+
+  body {
+    @apply bg-fog text-ocean-900;
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: var(--color-brand-500);
+    color: #fff;
+  }
+
+  *:focus-visible {
+    outline: 2px solid var(--color-brand-500);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+/* Text tuned: primary ink is a deep warm brown, not near-black. */
+@utility text-ocean-900 { color: #211c1a; }
+@utility text-ocean-800 { color: #2c2622; }
+@utility text-ocean-700 { color: #3a332c; }
+
+@utility font-mono {
+  font-family: var(--font-mono);
+}
+
+/* ------------------------------------------------------------------
+   Scrapbook primitives
+   ------------------------------------------------------------------ */
+
+/* Paper surface — a flat sheet pinned to the canvas */
+@utility paper {
+  background: var(--color-cloud);
+  border: 1px solid rgb(60 42 24 / 0.12);
+  box-shadow: var(--shadow-soft);
+}
+
+/* A slightly lifted, tactile sheet */
+@utility paper-float {
+  background: var(--color-cloud);
+  border: 1px solid rgb(60 42 24 / 0.12);
+  box-shadow: var(--shadow-float);
+}
+
+/* Warm translucent glass for overlays on maps/charts */
+@utility glass {
+  background: rgb(253 251 246 / 0.86);
+  backdrop-filter: blur(12px) saturate(1.15);
+  border: 1px solid rgb(60 42 24 / 0.1);
+}
+
+/* Kept for compatibility — maps to the paper surface */
+@utility panel {
+  background: var(--color-cloud);
+  border: 1px solid rgb(60 42 24 / 0.1);
+  box-shadow: var(--shadow-soft);
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
+}
+
+/* Editorial display heading — the oversized serif "field report" voice */
+@utility display {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 0.98;
+}
+
+/* Small "typed" annotation label */
+@utility typed {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+/* Pinned-card rotation helper */
+@utility pin-1 { transform: rotate(-1.2deg); }
+@utility pin-2 { transform: rotate(1.4deg); }
+@utility pin-3 { transform: rotate(-0.8deg); }
+
+@layer components {
+  /* Warm hover lift for interactive paper objects */
+  .hover-lift {
+    transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+  }
+  .hover-lift:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-pop);
+    border-color: rgb(60 42 24 / 0.22);
+  }
+
+  .reveal {
+    opacity: 0;
+    transform: translateY(18px);
+    transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1), transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .reveal.reveal-visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* Editorial hairline divider */
+  .hairline {
+    background: linear-gradient(90deg, transparent, rgb(60 42 24 / 0.22) 30%, rgb(60 42 24 / 0.22) 70%, transparent);
+  }
+
+  /* Small typographic eyebrow — sky blue mono stamp */
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: var(--font-mono);
+    font-size: 0.675rem;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--color-brand-600);
+  }
+
+  /* Washi-tape / caption chip */
+  .tape-chip {
+    background: rgb(252 250 244 / 0.9);
+    border: 1px solid rgb(60 42 24 / 0.14);
+    box-shadow: var(--shadow-stamp);
+  }
+
+  /* Subtle paper grain via layered radial gradients */
+  .paper-grain {
+    background-image:
+      radial-gradient(1200px 600px at 12% -6%, rgb(255 255 255 / 0.55), transparent 58%),
+      radial-gradient(900px 500px at 106% 8%, rgb(236 243 248 / 0.7), transparent 55%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001s !important;
+  }
+}
+
+/* ------------------------------------------------------------------
+   shadcn/ui surface tokens (used by wireframe-dotted-globe and any
+   future ui/ components). The .dark tokens drive the dark globe shell.
+   ------------------------------------------------------------------ */
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+}
+
+:root {
+  --foreground: oklch(0 0 0);
+  --card: oklch(0.94 0 0);
+  --card-foreground: oklch(0 0 0);
+  --popover-foreground: oklch(0 0 0);
+  --primary: oklch(0 0 0);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.5 0 0);
+  --secondary-foreground: oklch(1 0 0);
+  --muted: oklch(0.94 0 0);
+  --muted-foreground: oklch(0 0 0);
+  --accent: oklch(0.8 0 0);
+  --accent-foreground: oklch(0 0 0);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.5 0 0);
+  --input: oklch(1 0 0);
+  --ring: oklch(0 0 0 / 0.2);
+  --chart-1: oklch(0 0 0);
+  --chart-2: oklch(0.5 0 0);
+  --chart-3: oklch(0.94 0 0);
+  --chart-4: oklch(0.8 0 0);
+  --chart-5: oklch(0 0 0);
+  --radius: 0.5rem;
+  --sidebar: oklch(0.94 0 0);
+  --sidebar-foreground: oklch(0 0 0);
+  --sidebar-primary: oklch(0 0 0);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.8 0 0);
+  --sidebar-accent-foreground: oklch(0 0 0);
+  --sidebar-border: oklch(0.5 0 0);
+  --sidebar-ring: oklch(0 0 0 / 0.2);
+}
+
+.dark {
+  --background: oklch(0 0 0);
+  --foreground: oklch(1 0 0);
+  --card: oklch(0.1 0 0);
+  --card-foreground: oklch(1 0 0);
+  --popover: oklch(0 0 0);
+  --popover-foreground: oklch(1 0 0);
+  --primary: oklch(1 0 0);
+  --primary-foreground: oklch(0 0 0);
+  --secondary: oklch(0.3 0 0);
+  --secondary-foreground: oklch(1 0 0);
+  --muted: oklch(0.3 0 0);
+  --muted-foreground: oklch(0.7 0 0);
+  --accent: oklch(0.3 0 0);
+  --accent-foreground: oklch(1 0 0);
+  --destructive: oklch(0.396 0.141 25.723);
+  --destructive-foreground: oklch(0.637 0.237 25.331);
+  --border: oklch(0.3 0 0);
+  --input: oklch(0.3 0 0);
+  --ring: oklch(1 0 0 / 0.2);
+  --chart-1: oklch(1 0 0);
+  --chart-2: oklch(0.7 0 0);
+  --chart-3: oklch(0.5 0 0);
+  --chart-4: oklch(0.3 0 0);
+  --chart-5: oklch(1 0 0);
+  --sidebar: oklch(0.1 0 0);
+  --sidebar-foreground: oklch(1 0 0);
+  --sidebar-primary: oklch(1 0 0);
+  --sidebar-primary-foreground: oklch(0 0 0);
+  --sidebar-accent: oklch(0.3 0 0);
+  --sidebar-accent-foreground: oklch(1 0 0);
+  --sidebar-border: oklch(0.3 0 0);
+  --sidebar-ring: oklch(1 0 0 / 0.2);
+}

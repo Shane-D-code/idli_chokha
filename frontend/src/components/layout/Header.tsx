@@ -1,132 +1,127 @@
-import { useState } from "react";
-import { Menu, RotateCw, Search, SlidersHorizontal } from "lucide-react";
-import { useApp } from "@/state/AppContext";
-import { ModeTag } from "./ModeTag";
-import HealthIndicator from "./HealthIndicator";
-import { NotificationsDrawer } from "@/components/notifications/NotificationsDrawer";
-import { SearchOverlay } from "@/components/search/SearchOverlay";
+import { Diamond, Loader2, Play, Waves } from 'lucide-react'
+import { useClock, useScrollSpy } from '../../hooks/useScrollSpy'
+import { appActions, useApp } from '../../state/store'
 
-function formatIST(iso?: string): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-    timeZone: "Asia/Kolkata",
-  }).format(d);
-  return parts.toUpperCase().replace(",", " /") + " IST";
-}
+const NAV = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'genesis', label: 'Genesis' },
+  { id: 'forecast', label: 'Forecast' },
+  { id: 'hazards', label: 'Hazards' },
+  { id: 'districts', label: 'Districts' },
+  { id: 'environment', label: 'Environment' },
+  { id: 'explain', label: 'Model' },
+  { id: 'data', label: 'Data' },
+]
 
-export function Header({ onOpenSidebar }: { onOpenSidebar: () => void }) {
-  const { system, mode, setMode, unread, markAllRead } = useApp();
-  const [notifOpen, setNotifOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
+/** Floating desktop-style toolbar — cream sheet, editorial labels. */
+export function Header() {
+  const active = useScrollSpy(NAV.map((n) => n.id))
+  const clock = useClock()
+  const demoMode = useApp((s) => s.demoMode)
+  const backendOnline = useApp((s) => s.backendOnline)
+  const pipeline = useApp((s) => s.pipeline)
+  const running = pipeline.running
 
-  const stale = system?.dataStale ?? false;
-  const activeName = system?.activeCyclone?.name ?? "—";
-  const operational = system?.systemOperational ?? true;
+  const pill = running
+    ? {
+        label: `RUNNING ${pipeline.progressPct}%`,
+        cls: 'border-warn-500/30 bg-warn-100 text-haze-700',
+        dot: 'bg-warn-500 animate-pulse',
+        title: pipeline.message,
+      }
+    : !demoMode
+      ? {
+          label: 'LIVE',
+          cls: 'border-safe-500/30 bg-safe-100 text-safe-600',
+          dot: 'bg-safe-500 animate-pulse',
+          title: 'Rendered from a real TOOFAN pipeline run',
+        }
+      : backendOnline
+        ? {
+            label: 'SIMULATED',
+            cls: 'border-brand-500/30 bg-brand-100 text-brand-700',
+            dot: 'bg-brand-500',
+            title: 'Deterministic fixtures — run the pipeline to go LIVE',
+          }
+        : {
+            label: 'OFFLINE · SIMULATED',
+            cls: 'border-ink-300/40 bg-ink-100 text-ink-500',
+            dot: 'bg-ink-300',
+            title: 'Backend not connected on :8000',
+          }
 
   return (
-    <>
-      <header className="header app-header">
-        <button
-          className="header-icon-btn header-mobile-btn"
-          onClick={onOpenSidebar}
-          aria-label="Open navigation"
-        >
-          <Menu size={20} />
-        </button>
-
-        {/* Mobile brand — visible only when sidebar is hidden */}
-        <div className="header-brand header-brand--mobile">
-          <span className="header-brand-title">TOOFAN</span>
-          <span className="header-divider" aria-hidden="true" />
-          <span className="header-event">
-            <span className="val">{activeName}</span>
-          </span>
-        </div>
-
-        {/* Desktop: event + spacer */}
-        <div className="header-brand header-brand--desktop">
-          <span className="header-event">
-            <span className="lbl">Active Event</span>
-            <span className="val">{activeName}</span>
-          </span>
-          <span className="header-spacer" />
-        </div>
-
-        {/* Right controls */}
-        <div className="header-right">
-          <ModeTag
-            mode={mode}
-            onToggle={() => setMode(mode === "demo" ? "live" : "demo")}
-          />
-
-          <button
-            className="header-icon-btn"
-            onClick={() => setSearchOpen(true)}
-            aria-label="Global search"
-            title="Search (press /)"
-          >
-            <Search size={19} />
-          </button>
-
-          <div className="header-clock">
-            <span className="lbl">Last Update</span>
-            <span className="val">
-              {stale ? (
-                <span style={{ color: "var(--bad)", fontWeight: 900 }}>STALE</span>
-              ) : (
-                formatIST(system?.lastUpdated)
-              )}
+    <header className="fixed inset-x-0 top-3 z-50 px-3 sm:px-6">
+      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-4 rounded-2xl border border-ink-200/70 bg-cloud/85 px-4 shadow-float backdrop-blur-md lg:px-5">
+        <a href="#overview" className="group flex items-center gap-3">
+          <span className="flex h-9 w-9 rotate-45 items-center justify-center rounded-[10px] border border-ink-200 bg-cloud shadow-soft">
+            <span className="-rotate-45 flex items-center justify-center">
+              <Diamond className="h-4 w-4 text-brand-500" />
             </span>
-          </div>
-
-          <span className="live-dot">
-            <span
-              className="pulse"
-              style={{ background: operational ? (stale ? "var(--warn)" : "var(--ok)") : "var(--bad)", color: "var(--ok)" }}
-            />
-            {stale ? "PARTIAL" : "OPERATIONAL"}
           </span>
-
-          <div style={{ marginLeft: 12 }}>
-            <HealthIndicator />
-          </div>
-
-          <button
-            className="header-icon-btn"
-            onClick={() => window.location.reload()}
-            aria-label="Refresh data"
-            title="Refresh"
-          >
-            <RotateCw size={19} />
-          </button>
-
-          <button
-            className="header-icon-btn"
-            onClick={() => {
-              setNotifOpen(true);
-              markAllRead();
-            }}
-            aria-label={`Notifications${unread ? `, ${unread} unread` : ""}`}
-            title="System announcements"
-          >
-            <span className="pos">
-              <SlidersHorizontal size={19} />
-              {unread > 0 ? <span className="badge-dot" aria-hidden="true" /> : null}
+          <span className="flex flex-col leading-none">
+            <span className="font-serif text-[1.35rem] font-normal tracking-tight text-ink-900">TOOFAN</span>
+            <span className="mt-0.5 font-mono text-[0.5rem] font-semibold uppercase tracking-[0.28em] text-brand-600">
+              Cyclone Intelligence
             </span>
-          </button>
-        </div>
-      </header>
+          </span>
+        </a>
 
-      <NotificationsDrawer open={notifOpen} onClose={() => setNotifOpen(false)} />
-      {searchOpen ? <SearchOverlay onClose={() => setSearchOpen(false)} /> : null}
-    </>
-  );
+        <nav className="no-scrollbar hidden items-center gap-1 overflow-x-auto lg:flex">
+          {NAV.map((n) => (
+            <a
+              key={n.id}
+              href={`#${n.id}`}
+              className={`relative whitespace-nowrap px-3 py-1.5 font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] transition ${
+                active === n.id ? 'text-brand-600' : 'text-ink-500 hover:text-ink-800'
+              }`}
+            >
+              {n.label}
+              <span
+                aria-hidden
+                className={`absolute inset-x-3 bottom-0.5 h-0.5 rounded-full bg-brand-500 transition-opacity ${active === n.id ? 'opacity-100' : 'opacity-0'}`}
+              />
+            </a>
+          ))}
+        </nav>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => !demoMode && !running && appActions.useDemo()}
+            title={pill.title}
+            className={`relative flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-mono text-[0.58rem] font-bold uppercase tracking-widest transition sm:flex ${
+              !demoMode ? 'cursor-pointer hover:opacity-80' : 'cursor-default'
+            } ${pill.cls}`}
+          >
+            <span className={`h-1.5 w-1.5 rounded-full ${pill.dot}`} />
+            {pill.label}
+            {running ? (
+              <span
+                aria-hidden
+                className="absolute inset-x-1 -bottom-[3px] h-0.5 overflow-hidden rounded-full bg-warn-500/20"
+              >
+                <span className="block h-full bg-warn-500" style={{ width: `${pipeline.progressPct}%` }} />
+              </span>
+            ) : null}
+          </button>
+          <button
+            onClick={() => void appActions.runPipeline()}
+            disabled={running || !backendOnline}
+            title={backendOnline ? 'Run the FANI (2019) archive storm through the live pipeline' : 'Backend not connected on :8000 — start `uvicorn backend.app.main:app`'}
+            className="flex items-center gap-1.5 rounded-full border border-ink-200 bg-cloud px-2.5 py-1 font-mono text-[0.6rem] font-bold uppercase tracking-widest text-ink-600 shadow-soft transition hover:border-brand-400 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {running ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
+            {running ? 'Running' : 'Run pipeline'}
+          </button>
+          <span className="hidden items-center gap-1.5 rounded-full border border-ink-200 bg-cloud px-2.5 py-1 font-mono text-[0.6rem] text-ink-500 md:flex">
+            <Waves className="h-3 w-3 text-brand-400" />
+            <span suppressHydrationWarning>{clock.time} UTC</span>
+          </span>
+          <span className="hidden items-center rounded-lg border border-ink-200 bg-cloud px-2.5 py-1 font-serif text-[0.8rem] italic text-ink-400 lg:flex">
+            № 02 · archive
+          </span>
+        </div>
+      </div>
+    </header>
+  )
 }

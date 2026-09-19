@@ -146,5 +146,43 @@
       "historical_variant": "wind_model.keras (SHA-256 b1fafcc91f24dda3e111cc01f762b9214aaf7a00c77a7c2205cd46c30032efb9) retained as documented baseline"
     },
     "file_hash": "53779bf2c5619b59f7bd08d4093ca70e1419aabc3d24437a59ffd2fd47655132"
+  },
+  "genesis_v1.0.0": {
+    "name": "genesis",
+    "version": "1.0.0",
+    "model_type": "genesis",
+    "training_dataset": "Genesis prototype: 300 samples / 191 NIO storms / 2015-2024 (external source report; training data and script not in this repo)",
+    "feature_version": "v1 (34 features: TCHP/OHC700_x + ERA5 u/v/r/t/q/w/z at 850/700/500/200 + SST/SST-anomaly + TCHP/OHC700_y)",
+    "training_period": [
+      "2015-01-01",
+      "2024-12-31"
+    ],
+    "validation_metrics": {},
+    "test_metrics": {},
+    "preprocessing_version": "v1 (embedded sklearn SimpleImputer, median)",
+    "checkpoint_path": "genisis models/tc_genesis_lightgbm_300_OPTIMIZED.joblib",
+    "calibration_artifact": null,
+    "timestamp": "2026-09-19T10:02:16.976610",
+    "git_commit": "c26d71671e79",
+    "configuration": {
+      "mode": "production",
+      "production_model": "lightgbm",
+      "threshold": 0.24,
+      "target": "genesis_24h",
+      "n_features": 34,
+      "artifacts": {
+        "lightgbm": "genisis models/tc_genesis_lightgbm_300_OPTIMIZED.joblib",
+        "xgboost": "genisis models/tc_genesis_xgboost_300_OPTIMIZED.joblib",
+        "randomforest": "genisis models/tc_genesis_randomforest_300_OPTIMIZED.joblib",
+        "imputer": "genisis models/tc_genesis_300_imputer.joblib"
+      },
+      "ensemble_weights": {
+        "lightgbm": 0.4,
+        "xgboost": 0.35,
+        "randomforest": 0.25
+      },
+      "scientific_status": "prototype / uncalibrated"
+    },
+    "file_hash": "d3a2a19c7787c252d7be824cc19824623e1e21464a990be0766b1e7e30a1cf00"
   }
 }

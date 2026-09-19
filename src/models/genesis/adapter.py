@@ -722,8 +722,30 @@ class GenesisModelAdapter(GenesisModel):
 # ============================================================================
 
 class ModelAdapter(GenesisModelAdapter):
-    """Alias for orchestrator compatibility - accepts (raw_model, metadata)."""
-    pass
+    """Orchestrator-compatible wrapper, constructed as ``(raw_model, metadata)``.
+
+    The pipeline orchestrator constructs every module adapter as
+    ``adapters.ModelAdapter(raw_model, metadata)`` and never calls ``.load()``
+    afterwards. The genesis artifacts are self-loading
+    (LightGBM + XGBoost + RandomForest pipelines under ``genisis models/``),
+    so the registry ``raw_model`` (the LightGBM pipeline) is ignored and the
+    three approved artifacts are loaded here, mirroring the trajectory and RI
+    orchestrator wrappers.
+    """
+
+    def __init__(self, raw_model: Any = None,
+                 metadata: ModelMetadata | None = None):
+        version = metadata.version if metadata and metadata.version else "1.0.0"
+        model_info = ModelInfo(
+            name=metadata.name if metadata and metadata.name else "genesis",
+            version=version,
+            model_type="genesis",
+            loaded_at=datetime.utcnow(),
+            metadata=metadata,
+            framework="lightgbm",
+        )
+        super().__init__(model_info=model_info, mode="production")
+        self.load()
 
 
 def create_genesis_adapter(
