@@ -41,6 +41,18 @@ export interface PipelineState {
   lastError: string | null
 }
 
+/** Live animated playhead emitted by the intensity timeline playback.
+ *  Components (map, charts) render a moving marker at this interpolated
+ *  point while a playback is active, otherwise they show the current storm. */
+export interface PlaybackPoint {
+  /** 2-hourly step, e.g. 6 = +6H. */
+  hours: number
+  lat: number
+  lon: number
+  windKt: number
+  pressureHpa: number
+}
+
 export interface AppState {
   demoMode: boolean
   backendOnline: boolean
@@ -50,6 +62,7 @@ export interface AppState {
   selectedDistrictId: string | null
   hazardLayer: HazardLayer
   autoRotate: boolean
+  playback: PlaybackPoint | null
   data: ToofanSnapshot
 }
 
@@ -71,6 +84,7 @@ let state: AppState = {
   selectedDistrictId: snapshot.sign.quickSelectIds[2] ?? null,
   hazardLayer: 'rainfall',
   autoRotate: true,
+  playback: null,
   data: snapshot,
 }
 
@@ -127,9 +141,14 @@ export const appActions = {
   setAutoRotate(on: boolean) {
     setState({ autoRotate: on })
   },
+  /** Move the shared playback playhead (map + charts) for the timeline scrub. */
+  setPlayback(p: PlaybackPoint | null) {
+    setState({ playback: p })
+  },
   useDemo() {
     setState({
       demoMode: true,
+      playback: null,
       data: getDemoSnapshot(),
       pipeline: { ...state.pipeline, running: false, lastError: null },
     })
@@ -183,6 +202,7 @@ export const appActions = {
       setState({
         backendOnline: true,
         demoMode: false,
+        playback: null,
         data: live,
         selectedForecastId: null,
         selectedDistrictId: live.sign.quickSelectIds[1] ?? null,

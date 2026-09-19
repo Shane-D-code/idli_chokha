@@ -113,24 +113,6 @@ function sourcesOf(provider: ProviderSource[]): ToofanSnapshot['sources'] {
   }))
 }
 
-function systemStatusOf(res: PipelineRunResult): ToofanSnapshot['systemStatus'] {
-  const perStatus = res.per_hazard_status
-  const entries: ToofanSnapshot['systemStatus'] = [
-    { id: 'api', label: 'Pipeline API', status: 'live', detail: `pipeline ${res.pipeline_status.toLowerCase()}` },
-    { id: 'sse', label: 'Event stream', status: 'live', detail: 'SSE pipeline_events' },
-  ]
-  for (const [mod, st] of Object.entries(perStatus)) {
-    if (mod === 'hazard_engine') continue
-    entries.push({
-      id: mod,
-      label: mod.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase()),
-      status: statusOf(st),
-      detail: res.per_hazard_reasons?.[mod] ?? undefined,
-    })
-  }
-  return entries
-}
-
 function cycloneOf(a: AssessmentState): Cyclone {
   const c = a.cyclone
   const track = a.track
@@ -384,7 +366,6 @@ export function buildLiveSnapshot(res: PipelineRunResult): ToofanSnapshot {
     districts,
     satellite: [],
     sources: sourcesOf(res.provider_sources),
-    systemStatus: systemStatusOf(res),
     sign: {
       quickSelectIds: districts.districts.slice(0, 3).map((d) => d.id),
     },

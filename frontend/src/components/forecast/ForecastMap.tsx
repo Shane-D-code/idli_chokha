@@ -65,6 +65,7 @@ export function ForecastMap() {
   const hazardRegions = useHazardRegions()
   const activeLayer = useApp((s) => s.activeLayer)
   const selectedId = useApp((s) => s.selectedForecastId)
+  const playback = useApp((s) => s.playback)
   const districts = useApp((s) => s.data.districts.districts)
 
   const viewW = proj.width / zoom
@@ -255,6 +256,28 @@ export function ForecastMap() {
           ))}
           <circle cx={marker.x} cy={marker.y} r={10} fill={getIntensityColor(cyclone.windKt)} opacity={0.25} />
           <circle cx={marker.x} cy={marker.y} r={4.6} fill={getIntensityColor(cyclone.windKt)} stroke="#FFFFFF" strokeWidth={1.6} />
+
+          {/* ---- Playback playhead marker — animates along the track ---- */}
+          {playback ? (
+            <g>
+              <circle cx={proj.xOf(playback.lon)} cy={proj.yOf(playback.lat)} r={13} fill={getIntensityColor(playback.windKt)} opacity={0.18} />
+              <circle cx={proj.xOf(playback.lon)} cy={proj.yOf(playback.lat)} r={4.6} fill="#FFFFFF" stroke={getIntensityColor(playback.windKt)} strokeWidth={2} />
+              <text
+                x={proj.xOf(playback.lon)}
+                y={proj.yOf(playback.lat) - 12}
+                fontSize={9}
+                fontFamily="var(--font-mono)"
+                fontWeight={700}
+                fill={getIntensityColor(playback.windKt)}
+                textAnchor="middle"
+                style={{ paintOrder: 'stroke' }}
+                stroke="rgba(245,250,253,0.94)"
+                strokeWidth={3}
+              >
+                {hoursLabel(playback.hours)}
+              </text>
+            </g>
+          ) : null}
         </g>
 
         {/* ---- Forecast track + points ---- */}

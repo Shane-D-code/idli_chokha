@@ -1,7 +1,7 @@
 import { CheckCircle2, MinusCircle, XCircle } from 'lucide-react'
 import { useEnvironment } from '../../hooks/index'
 import { section } from '../layout/SectionShell'
-import { SectionHeader, StatusBadge } from '../ui/primitives'
+import { SectionHeader } from '../ui/primitives'
 import { EnvironmentCharts } from './EnvironmentCharts'
 import type { Favourability } from '../../types/common'
 import type { EnvironmentMetric } from '../../types/environment'
@@ -30,9 +30,7 @@ export function Environment() {
           title="The Storm Environment"
           subtitle="Warm sea, low shear and plenty of moisture set the stage. These fields drive the intensity outlook."
         />
-        <div className="lg:pb-2">
-          <StatusBadge status={env.status ?? 'simulated'} />
-        </div>
+        <div className="lg:pb-2" />
       </div>
 
       {/* ---- open metric grid: 4 groups, large values, hairline separators ---- */}

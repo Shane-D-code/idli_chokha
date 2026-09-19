@@ -2,7 +2,6 @@ import { useHazards, useHazardRegions } from '../../hooks/index'
 import { appActions, useApp } from '../../state/store'
 import { section } from '../layout/SectionShell'
 import { SectionHeader } from '../ui/primitives'
-import { StatusBadge } from '../ui/primitives'
 import type { HazardLayer } from '../../types/hazard'
 import { HazardMap } from './HazardMap'
 import { HazardModules, StormSurgeStrip } from './HazardModules'
@@ -22,9 +21,6 @@ export function HazardsSection() {
           title="Multi-Hazard Forecast"
           subtitle="TOOFAN fuses rainfall, flood, landslide, storm-surge and wind guidance into one integrated impact picture."
         />
-        <div className="lg:pb-2">
-          <StatusBadge status={hazards.status} />
-        </div>
       </div>
 
       {/* ---- hazard selector: flat underline nav ---- */}

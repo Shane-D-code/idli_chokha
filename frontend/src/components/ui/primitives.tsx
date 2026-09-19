@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import type { DataStatus, RiskLevel } from '../../types/common'
+import type { RiskLevel } from '../../types/common'
 
 /* ============================================================
    TOOFAN scrapbook primitives
@@ -237,24 +237,6 @@ export function RiskBadge({ level, className = '' }: { level: RiskLevel; classNa
   return (
     <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 font-mono text-[0.66rem] font-semibold uppercase tracking-wider ${RISK_STYLES[level]} ${className}`}>
       {RISK_LABEL[level]}
-    </span>
-  )
-}
-
-export function StatusBadge({ status }: { status: DataStatus }) {
-  const map: Record<DataStatus, { label: string; cls: string; dot: string }> = {
-    live: { label: 'LIVE', cls: 'bg-safe-100 text-safe-600 border-safe-500/30', dot: 'bg-safe-500' },
-    demo: { label: 'SIMULATED', cls: 'bg-brand-100 text-brand-700 border-brand-500/30', dot: 'bg-brand-500' },
-    simulated: { label: 'SIMULATED', cls: 'bg-warn-100 text-haze-700 border-warn-500/30', dot: 'bg-warn-500' },
-    degraded: { label: 'DEGRADED', cls: 'bg-warn-100 text-haze-700 border-warn-500/30', dot: 'bg-warn-500' },
-    unavailable: { label: 'NOT AVAILABLE', cls: 'bg-ink-100 text-ink-500 border-ink-300/40', dot: 'bg-ink-300' },
-    not_connected: { label: 'NOT CONNECTED', cls: 'bg-ink-100 text-ink-500 border-ink-300/40', dot: 'bg-ink-300' },
-  }
-  const s = map[status]
-  return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-mono text-[0.64rem] font-semibold uppercase tracking-wider ${s.cls}`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${s.dot} ${status === 'live' ? 'animate-pulse' : ''}`} />
-      {s.label}
     </span>
   )
 }

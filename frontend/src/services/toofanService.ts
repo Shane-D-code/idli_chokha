@@ -10,8 +10,8 @@ import type { GenesisBundle } from '../types/genesis'
 import type { EnvironmentBundle } from '../types/environment'
 import type { HazardBundle, HazardRegion } from '../types/hazard'
 import type { DistrictBundle } from '../types/district'
-import { demoSatellite, demoSources, demoSystemStatus } from '../data/demo/satellite'
-import type { DataSource, SatelliteObservation, SystemComponentStatus } from '../types/satellite'
+import { demoSatellite, demoSources } from '../data/demo/satellite'
+import type { DataSource, SatelliteObservation } from '../types/satellite'
 
 /**
  * Aggregates every demo bundle into one coherent snapshot — the application
@@ -28,7 +28,6 @@ export interface ToofanSnapshot {
   districts: DistrictBundle
   satellite: SatelliteObservation[]
   sources: DataSource[]
-  systemStatus: SystemComponentStatus[]
   sign: { quickSelectIds: string[] }
 }
 
@@ -45,7 +44,6 @@ export function getDemoSnapshot(): ToofanSnapshot {
     districts: buildDistrictBundle(demoSites, cyclone, forecast),
     satellite: demoSatellite,
     sources: demoSources,
-    systemStatus: demoSystemStatus,
     sign: { quickSelectIds: demoQuickSelectIds },
   }
 }

@@ -30,14 +30,12 @@ export function Footer() {
 
         <p className="max-w-xl text-center text-sm leading-relaxed text-ink-500">
           AI-powered tropical cyclone intelligence for the North Indian Ocean.
-          All values shown are simulated data and are not real meteorological
+          All values shown are illustrative and are not real meteorological
           guidance.
         </p>
 
         <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 font-mono text-[0.6rem] uppercase tracking-wider text-ink-400">
           <span>INSAT · ERA5 · IMD · NWP · IMERG · IBTrACS</span>
-          <span className="hidden text-ink-300 sm:inline">|</span>
-          <span>SIMULATED MODE</span>
         </div>
 
         <div className="hairline h-px w-full opacity-60" />

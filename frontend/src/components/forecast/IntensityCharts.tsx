@@ -12,6 +12,7 @@ import {
   ReferenceLine,
 } from 'recharts'
 import { useLifecycle, useObserved, useCyclone } from '../../hooks/index'
+import { useApp } from '../../state/store'
 import { getIntensityColor } from '../../lib/ua'
 import { formatDate, formatFullUtc } from '../../lib/format'
 
@@ -53,6 +54,7 @@ export function IntensityCharts() {
   const lifecycle = useLifecycle()
   const observed = useObserved()
   const cyclone = useCyclone()
+  const playback = useApp((s) => s.playback)
 
   if (lifecycle.length < 2 || !observed.length) {
     return (
@@ -75,6 +77,7 @@ export function IntensityCharts() {
   const peak = observed.reduce((a, b) => (b.windKt > a.windKt ? b : a), observed[0])
   const peakT = hoursSince(t0, peak.validAt)
   const currentT = hoursSince(t0, cyclone.validAt)
+  const baseT = Math.round(hoursSince(t0, lifecycle[0].validAt))
 
   return (
     <div className="grid gap-x-12 gap-y-10 lg:grid-cols-2">
@@ -103,6 +106,7 @@ export function IntensityCharts() {
               <ReferenceDot yAxisId="wind" x={peakT} y={peak.windKt} r={5} fill="#e8892f" stroke="#fff" strokeWidth={1.5} />
               <ReferenceLine yAxisId="wind" segment={[{ x: peakT, y: 0 }, { x: peakT, y: peak.windKt }]} stroke="#e8892f" strokeDasharray="3 3" />
               <ReferenceDot yAxisId="wind" x={currentT} y={cyclone.windKt} r={5} fill={getIntensityColor(cyclone.windKt)} stroke="#211C1A" strokeWidth={1.5} />
+              {playback ? <ReferenceDot yAxisId="wind" x={baseT + playback.hours} y={playback.windKt} r={4.5} fill="#FFFFFF" stroke={getIntensityColor(playback.windKt)} strokeWidth={2} /> : null}
             </ComposedChart>
           </ResponsiveContainer>
         </div>

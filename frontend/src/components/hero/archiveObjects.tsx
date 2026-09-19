@@ -25,7 +25,6 @@ export function MiniSatelliteThumb({ className = '' }: { className?: string }) {
       <canvas ref={ref} className="block w-full opacity-95" style={{ aspectRatio: '180 / 108' }} />
       <div className="flex items-center justify-between border-t border-ink-100 px-2 py-1">
         <span className="typed text-[0.5rem] text-ink-500">Satellite obs.</span>
-        <span className="rounded bg-warn-100 px-1 font-mono text-[0.48rem] font-semibold uppercase text-haze-700">sim</span>
       </div>
     </div>
   )

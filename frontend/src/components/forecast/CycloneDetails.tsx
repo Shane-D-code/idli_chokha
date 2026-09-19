@@ -23,7 +23,6 @@ export function CycloneDetails() {
     <div className="flex flex-col">
       <div className="flex items-baseline justify-between gap-3">
         <p className="typed text-brand-600">Current Conditions</p>
-        <span className="font-mono text-[0.56rem] font-semibold uppercase tracking-wider text-ink-400">{c.status.toUpperCase()}</span>
       </div>
 
       <div className="mt-2 flex items-baseline gap-2">
@@ -48,7 +47,7 @@ export function CycloneDetails() {
 
       <p className="mt-4 text-[0.8rem] leading-relaxed text-ink-500">
         {demoMode
-          ? 'The 72-hour forecast keeps the system over open water, recurring ENE. Landfall is not assessed for this simulated scenario.'
+          ? 'The 72-hour model forecast projects the storm NNE toward Odisha–West Bengal, with landfall near the Sundarbans about +41H and steady decay after crossing the coast.'
           : 'Live run: wind, pressure and position are the current observed state; the trajectory carries no per-point intensity forecast. Track uncertainty is a degraded bound.'}{' '}
         {probe.length} examined track positions.
       </p>

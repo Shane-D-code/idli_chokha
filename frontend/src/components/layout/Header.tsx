@@ -17,38 +17,9 @@ const NAV = [
 export function Header() {
   const active = useScrollSpy(NAV.map((n) => n.id))
   const clock = useClock()
-  const demoMode = useApp((s) => s.demoMode)
   const backendOnline = useApp((s) => s.backendOnline)
   const pipeline = useApp((s) => s.pipeline)
   const running = pipeline.running
-
-  const pill = running
-    ? {
-        label: `RUNNING ${pipeline.progressPct}%`,
-        cls: 'border-warn-500/30 bg-warn-100 text-haze-700',
-        dot: 'bg-warn-500 animate-pulse',
-        title: pipeline.message,
-      }
-    : !demoMode
-      ? {
-          label: 'LIVE',
-          cls: 'border-safe-500/30 bg-safe-100 text-safe-600',
-          dot: 'bg-safe-500 animate-pulse',
-          title: 'Rendered from a real TOOFAN pipeline run',
-        }
-      : backendOnline
-        ? {
-            label: 'SIMULATED',
-            cls: 'border-brand-500/30 bg-brand-100 text-brand-700',
-            dot: 'bg-brand-500',
-            title: 'Deterministic fixtures — run the pipeline to go LIVE',
-          }
-        : {
-            label: 'OFFLINE · SIMULATED',
-            cls: 'border-ink-300/40 bg-ink-100 text-ink-500',
-            dot: 'bg-ink-300',
-            title: 'Backend not connected on :8000',
-          }
 
   return (
     <header className="fixed inset-x-0 top-3 z-50 px-3 sm:px-6">
@@ -86,24 +57,6 @@ export function Header() {
         </nav>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => !demoMode && !running && appActions.useDemo()}
-            title={pill.title}
-            className={`relative flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-mono text-[0.58rem] font-bold uppercase tracking-widest transition sm:flex ${
-              !demoMode ? 'cursor-pointer hover:opacity-80' : 'cursor-default'
-            } ${pill.cls}`}
-          >
-            <span className={`h-1.5 w-1.5 rounded-full ${pill.dot}`} />
-            {pill.label}
-            {running ? (
-              <span
-                aria-hidden
-                className="absolute inset-x-1 -bottom-[3px] h-0.5 overflow-hidden rounded-full bg-warn-500/20"
-              >
-                <span className="block h-full bg-warn-500" style={{ width: `${pipeline.progressPct}%` }} />
-              </span>
-            ) : null}
-          </button>
           <button
             onClick={() => void appActions.runPipeline()}
             disabled={running || !backendOnline}

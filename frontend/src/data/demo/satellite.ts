@@ -1,4 +1,4 @@
-import type { DataSource, SatelliteObservation, SatelliteBand, SystemComponentStatus } from '../../types/satellite'
+import type { DataSource, SatelliteObservation, SatelliteBand } from '../../types/satellite'
 import { VALID_BASE_ISO } from './cyclone'
 
 /** Geographic frame displayed by every simulated band. The storm centre is
@@ -19,7 +19,7 @@ export const demoSatellite: SatelliteObservation[] = [
     capturedAt: VALID_BASE_ISO,
     status: 'simulated',
     seed: 41,
-    notes: 'Cloud-top brightness temperature · 120°E–78°E · ±0 simulated field, not a live observation',
+    notes: 'Cloud-top brightness temperature · 120°E–78°E · ±0 field, not a live observation',
     bounds: BAY_OF_BENGAL_BOUNDS,
     temperatureRange: { min: -80, max: 35 },
   },
@@ -31,7 +31,7 @@ export const demoSatellite: SatelliteObservation[] = [
     capturedAt: VALID_BASE_ISO,
     status: 'simulated',
     seed: 92,
-    notes: 'Day-lit reflectance · 0.64 µm · simulated cloud bands',
+    notes: 'Day-lit reflectance · 0.64 µm · procedural cloud bands',
     bounds: BAY_OF_BENGAL_BOUNDS,
   },
   {
@@ -65,22 +65,8 @@ export const demoSources: DataSource[] = [
   { id: 'nwp', name: 'NWP', provides: 'Ensemble track & intensity guidance', status: 'demo', detail: 'Multi-model forecast ensemble' },
   { id: 'imerg', name: 'GPM IMERG', provides: 'Precipitation estimates', status: 'demo', detail: 'Half-hourly rain-rate fields' },
   { id: 'ibtracs', name: 'IBTrACS', provides: 'Historical cyclone tracks', status: 'demo', detail: 'Training data for trajectory models' },
-  { id: 'gsi', name: 'ISRO GSI', provides: 'Geology & slope data for landslide assessment', status: 'unavailable', detail: 'Contact point not configured in demo' },
+  { id: 'gsi', name: 'ISRO GSI', provides: 'Geology & slope data for landslide assessment', status: 'unavailable', detail: 'Contact point not configured' },
   { id: 'gis', name: 'District GIS', provides: 'Administrative boundaries · census attributes', status: 'demo', detail: 'Census 2011 boundaries (offline bundle)' },
-]
-
-export const demoSystemStatus: SystemComponentStatus[] = [
-  { id: 'satellite', label: 'Satellite', status: 'demo', detail: 'Procedural demo imagery' },
-  { id: 'environment', label: 'Environment', status: 'demo', detail: 'Fixture fields' },
-  { id: 'detection', label: 'Detection', status: 'demo', detail: 'Fixture output' },
-  { id: 'genesis', label: 'Genesis', status: 'demo', detail: 'Fixture output' },
-  { id: 'track', label: 'Track', status: 'demo', detail: 'Fixture output' },
-  { id: 'intensity', label: 'Intensity', status: 'demo', detail: 'Fixture output' },
-  { id: 'rainfall', label: 'Rainfall', status: 'demo', detail: 'Fixture output' },
-  { id: 'flood', label: 'Flood', status: 'demo', detail: 'Fixture output' },
-  { id: 'landslide', label: 'Landslide', status: 'demo', detail: 'Fixture output' },
-  { id: 'district-risk', label: 'District Risk', status: 'demo', detail: 'Fixture output' },
-  { id: 'api', label: 'API', status: 'not_connected', detail: 'No backend service attached' },
 ]
 
 export { VALID_BASE_ISO }

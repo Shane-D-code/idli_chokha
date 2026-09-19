@@ -3,7 +3,7 @@ import { getCycloneAbbr, getCycloneLabel, getIntensityColor } from '../../lib/ua
 import { formatLatLon } from '../../lib/geo'
 import { formatFullUtc } from '../../lib/format'
 import { RiskBadge } from '../ui/primitives'
-import { Rule, StatusDot } from '../ui/editorial'
+import { Rule } from '../ui/editorial'
 
 /* Hero-right open information surface — one continuous editorial column
    broken into four groups by whitespace, typography and thin rules. */
@@ -94,12 +94,6 @@ export function CycloneSystemPanel() {
               {c.riskLevel}
             </span>
           </div>
-        </div>
-        <div className="flex flex-col items-end gap-1">
-          <span className="typed text-ink-400">Data status</span>
-          <span className="flex items-center gap-2 font-mono text-[0.72rem] font-semibold uppercase tracking-wider text-ink-800">
-            <StatusDot color={accent} /> {c.status.toUpperCase()}
-          </span>
         </div>
       </div>
     </div>

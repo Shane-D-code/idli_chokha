@@ -74,8 +74,4 @@ export function useSources() {
   return useData().sources
 }
 
-export function useSystemStatus() {
-  return useData().systemStatus
-}
-
 export { appActions }

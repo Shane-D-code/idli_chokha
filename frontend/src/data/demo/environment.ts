@@ -5,7 +5,7 @@ export const demoEnvironmentMetrics: Omit<EnvironmentBundle, 'charts'> = {
     { id: 'sst', variable: 'Sea Surface Temperature', value: 29.4, unit: '°C', favourability: 'favourable', note: '+0.8°C above climatology' },
     { id: 'sst-anom', variable: 'SST Anomaly', value: 0.8, unit: '°C', favourability: 'favourable', note: 'Strong warm anomaly' },
     { id: 'tchp', variable: 'Cyclone Heat Potential', value: 68, unit: 'kJ/cm²', favourability: 'favourable', note: 'Deep warm layer' },
-    { id: 'ohc', variable: 'Ocean Heat Content', value: 94, unit: 'kJ/cm²', favourability: 'favourable', note: 'Rising over 5 days' },
+    { id: 'ohc', variable: 'Ocean Heat Content', value: 94, unit: 'kJ/cm²', favourability: 'favourable', note: 'Rising over 54 h' },
   ],
   atmosphere: [
     { id: 'shear', variable: 'Vertical Wind Shear', value: 8, unit: 'kt', favourability: 'favourable', note: '0–6 km layer' },
@@ -38,7 +38,7 @@ function series(label: string, value: number, unit: string, fav: EnvSeries['favo
   }
 }
 
-const BASE = new Date('2026-09-02T13:12:00Z').getTime()
+const BASE = new Date('2020-05-18T18:00:00Z').getTime()
 
 export const demoEnvCharts: EnvSeries[] = [
   series('Sea Surface Temperature', 29.4, '°C', 'favourable', 'Rising · +0.4°C/12h', 1, [27.9, 28.1, 28.0, 28.3, 28.6, 28.8, 28.9, 29.1, 29.3, 29.4], 6, BASE),

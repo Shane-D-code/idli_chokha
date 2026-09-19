@@ -18,12 +18,15 @@ export function ForecastSection() {
       title="Track & Intensity"
       subtitle={
         demoMode
-          ? 'The system is forecast to recurve and remain over the Bay of Bengal through +72H. Track, cone of uncertainty and intensity timeline are drawn from a single forecast bundle.'
+          ? 'AMPHAN (May 2020) replay: the storm is forecast to track NNE from the Bay of Bengal toward Odisha–West Bengal with landfall near the Sundarbans about +41H. Track, cone of uncertainty and intensity timeline are drawn from a single forecast bundle.'
           : 'Live pipeline: the track and cone of uncertainty are drawn from the LT3P trajectory model. Current observed state is shown; the intensity forecast is not available in this stage.'
       }
     >
-      {/* ---- MAP — the primary artifact ---- */}
+      {/* ---- MAP + PLAYBACK TIMELINE — the primary artifact ---- */}
       <ForecastMap />
+      <div className="mt-3">
+        <IntensityTimeline />
+      </div>
       <div className="mt-3">
         <ForecastProvenance />
       </div>
@@ -38,9 +41,8 @@ export function ForecastSection() {
 
       <Rule className="mt-10" />
 
-      {/* ---- TIMELINE + CHARTS ---- */}
+      {/* ---- INTENSITY + PRESSURE CHARTS ---- */}
       <div className="mt-10 grid gap-x-12 gap-y-10">
-        <IntensityTimeline />
         <IntensityCharts />
       </div>
     </SectionShell>

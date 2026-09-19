@@ -40,7 +40,7 @@ export function GenesisSection() {
           title="Genesis + Satellite"
           subtitle={
             demoMode
-              ? 'A cyclone starts long before it is a cyclone — a drifting disturbance, a warm sea, a column of rising air. These pages trace AMPHAN-SIM from its first spark of organization and show you the sky as the satellite reads it.'
+              ? 'A cyclone starts long before it is a cyclone — a drifting disturbance, a warm sea, a column of rising air. These pages trace AMPHAN from its first spark of organization and show you the sky as the satellite reads it.'
               : `A cyclone starts long before it is a cyclone. These pages trace ${c.name} (${formatDate(genesis.validAt)}) through the real pipeline — genesis probability, observed intensification and the sky as this deployment reads it.`
           }
         />
@@ -64,7 +64,6 @@ export function GenesisSection() {
           {genesis.model ? (
             <span>
               MODEL <span className="font-bold text-ink-800">{genesis.model}</span>
-              {genesis.modelVersion ? <span className="text-ink-400"> v{genesis.modelVersion}</span> : null}
             </span>
           ) : null}
           <span>

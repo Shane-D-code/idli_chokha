@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import * as d3 from "d3"
 import type { LatLon } from '../../types/common'
+import { globeLand } from '../../lib/geoData'
 
 export interface GlobeOverlay {
   /** Current cyclone position — always visible (projection handles clip). */
@@ -320,12 +321,12 @@ export default function RotatingEarth({ width = 800, height = 600, className = "
       try {
         setIsLoading(true)
 
-        const response = await fetch(
-          "https://raw.githubusercontent.com/martynafford/natural-earth-geojson/refs/heads/master/110m/physical/ne_110m_land.json",
-        )
-        if (!response.ok) throw new Error("Failed to load land data")
-
-        landFeatures = await response.json()
+        // Embedded offline land geometry (same source as the orthographic
+        // globe) — no network dependency, renders even fully offline.
+        landFeatures = {
+          type: 'FeatureCollection',
+          features: [{ type: 'Feature', properties: { featurecla: 'Land' }, geometry: globeLand }],
+        } as any
 
         // Generate dots for all land features
         let totalDots = 0

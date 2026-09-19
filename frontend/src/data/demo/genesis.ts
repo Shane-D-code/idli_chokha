@@ -3,8 +3,8 @@ import { VALID_BASE_ISO } from './cyclone'
 
 export const demoGenesisPredictions: GenesisPrediction[] = [
   { horizonHours: 24, probability: 12.8, threshold: 30, category: 'LOW', status: 'simulated' },
-  { horizonHours: 48, probability: 24.4, threshold: 30, category: 'LOW', status: 'simulated' },
-  { horizonHours: 72, probability: 39.1, threshold: 30, category: 'MODERATE', status: 'simulated' },
+  { horizonHours: 48, probability: 24.4, threshold: 30, category: 'MODERATE', status: 'simulated' },
+  { horizonHours: 72, probability: 39.1, threshold: 30, category: 'HIGH', status: 'simulated' },
 ]
 
 export const demoEnvironmentConditions: EnvironmentCondition[] = [
@@ -24,9 +24,9 @@ export const demoGenesis: GenesisBundle = {
   conditions: demoEnvironmentConditions,
   status: 'simulated',
   validAt: VALID_BASE_ISO,
-  model: 'GENESIS ENSEMBLE (SIMULATED)',
+  model: 'GENESIS ENSEMBLE',
   modelVersion: 'demo',
   calibrated: false,
   threshold: 30,
-  risk: 'MODERATE',
+  risk: 'LOW',
 }

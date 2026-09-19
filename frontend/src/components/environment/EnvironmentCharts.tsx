@@ -15,7 +15,7 @@ export function EnvironmentCharts() {
   return (
     <div className="flex flex-col">
       <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-ink-200 pb-2">
-        <p className="typed text-[0.58rem] text-brand-600">5-day Environmental Trends</p>
+        <p className="typed text-[0.58rem] text-brand-600">54-hour Environmental Trends</p>
         <span className="font-mono text-[0.56rem] text-ink-300">{env.charts.length ? 'TREND SERIES' : 'SNAPSHOT ONLY'}</span>
       </div>
       {env.charts.length === 0 ? (

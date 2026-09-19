@@ -17,9 +17,6 @@ export function ForecastSummary() {
     <div className="flex flex-col">
       <div className="flex items-baseline justify-between gap-3">
         <p className="typed text-brand-600">Forecast Summary</p>
-        <span className="font-mono text-[0.56rem] font-semibold uppercase tracking-wider text-ink-400">
-          {f.provenance.status}
-        </span>
       </div>
 
       {/* CURRENT — observed state only */}
@@ -47,8 +44,8 @@ export function ForecastSummary() {
         />
         <OpenMetric
           label="Landfall"
-          value="N/A"
-          note="not assessed in this run"
+          value={f.landfall ? f.landfall.timeLabel : 'N/A'}
+          note={f.landfall ? f.landfall.coast : 'not assessed in this run'}
           className="gap-1 px-5 py-4 [&_span]:text-xl"
         />
       </div>
@@ -80,7 +77,7 @@ export function ForecastSummary() {
 
       <p className="mt-3 text-[0.78rem] leading-relaxed text-ink-500">
         {demoMode
-          ? 'Landfall is not available for this scenario — the forecast recurves and stays over the Bay of Bengal through +72H.'
+          ? 'AMPHAN (May 2020) replay: the observed leg is the IMD best track; the model forecast (SIMULATED) projects the storm NNE toward the Odisha–West Bengal coast, with landfall near the Sundarbans about +41H.'
           : `Live run: the LT3P trajectory maps positions only (${f.track.length} points through +${lastHour}H) — no per-point or peak intensity is forecast by this stage. Landfall is not assessed.`}{' '}
         Movement {c.movement} · {compassLabel(c.bearingDeg)}, {c.movementKph} km/h.
       </p>

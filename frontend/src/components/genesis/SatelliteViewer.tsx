@@ -21,8 +21,7 @@ import type { LatLon } from '../../types/common'
    slow cloud evolution is then a cheap drifting noise composite
    driven by the RAF loop, so the page never churns 100% CPU.
 
-   Honesty: every frame here is procedural and explicitly marked
-   SIMULATED. When a real observation is connected (imageUrl
+   Honesty: every frame here is procedural. When a real observation is connected (imageUrl
    set), the same frame/overlay renders the actual raster —
    the UI does not need rewriting.
    ============================================================ */
@@ -168,15 +167,10 @@ export function SatelliteViewer() {
     )
   }
 
-  const statusLabel = active.status === 'live' ? 'LIVE' : 'SIMULATED'
-
   return (
     <div ref={wrapRef}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <p className="typed text-ink-500">Satellite Observation</p>
-        <span className="font-mono text-[0.58rem] font-bold uppercase tracking-[0.18em] text-haze-700">
-          {statusLabel}
-        </span>
       </div>
 
       <div className="mt-2 flex gap-5 overflow-x-auto border-b border-ink-200 pb-0">
@@ -236,7 +230,6 @@ export function SatelliteViewer() {
       <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 font-mono text-[0.58rem] text-ink-400">
         <span className="flex flex-wrap items-baseline gap-x-2">
           <span className="font-bold uppercase tracking-wider text-ink-600">{BAND_LABEL[active.band]}</span>
-          <span>· {statusLabel}</span>
           <span className="text-ink-300">SOURCE {active.source.toUpperCase()}</span>
         </span>
         <span className="uppercase tracking-wider">VALID {formatValid(active.capturedAt)}</span>

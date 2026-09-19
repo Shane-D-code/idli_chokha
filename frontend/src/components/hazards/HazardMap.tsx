@@ -93,7 +93,7 @@ export function HazardMap({ regions, layer }: { regions: HazardRegion[]; layer: 
       <p className="border-t border-ink-100 px-4 py-2 font-mono text-[0.58rem] text-ink-400">
         {regions.length === 0
           ? `${style.label.toUpperCase()} hazard layer NOT AVAILABLE in this run — the pipeline returned no regions for this variable.`
-          : 'Probabilistic hazard regions are illustrative simulated output. Actual risk requires agency-graded guidance.'}
+          : 'Probabilistic hazard regions are illustrative model output. Actual risk requires agency-graded guidance.'}
       </p>
     </div>
   )

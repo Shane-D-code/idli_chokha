@@ -1,4 +1,4 @@
-import { useCyclone } from '../../hooks/index'
+import { useCyclone, useForecast } from '../../hooks/index'
 import { getCycloneAbbr, getIntensityColor } from '../../lib/ua'
 import { formatLatLon } from '../../lib/geo'
 import { formatFullUtc } from '../../lib/format'
@@ -9,10 +9,12 @@ import { TrendArrow } from './TrendArrow'
 
 export function CycloneIntelligencePanel() {
   const c = useCyclone()
+  const f = useForecast()
+  const projected = f.lifecycle.length > 1 ? f.lifecycle[f.lifecycle.length - 1] : null
 
   const telemetry = [
     { label: 'Current max wind', value: `${c.windKt} kt`, note: `${Math.round(c.windKt * 1.852)} km/h` },
-    { label: 'Forecast intensity', value: 'N/A', note: 'not produced in this run' },
+    { label: 'Forecast intensity', value: projected ? `${projected.windKt} kt` : 'N/A', note: projected ? `projected +${projected.hours}H` : 'not produced in this run' },
     { label: 'Movement', value: `${c.movement} · ${c.movementKph} km/h`, note: `bearing ${c.bearingDeg}°` },
     { label: 'Radius of max winds', value: c.rmwKm > 0 ? `${c.rmwKm} km` : 'N/R', note: c.rmwKm > 0 ? 'RMW' : 'not reported' },
     { label: 'Track uncertainty', value: c.uncertaintyKm > 0 ? `±${c.uncertaintyKm} km` : 'N/R', note: c.uncertaintyKm > 0 ? 'degraded bound' : 'not reported' },

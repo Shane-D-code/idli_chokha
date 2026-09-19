@@ -47,10 +47,3 @@ export interface DataSource {
   status: DataStatus
   detail: string
 }
-
-export interface SystemComponentStatus {
-  id: string
-  label: string
-  status: DataStatus
-  detail?: string
-}

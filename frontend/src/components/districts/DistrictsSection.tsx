@@ -33,7 +33,7 @@ export function DistrictsSection() {
           subtitle="Choose a district or search any location to see expected approach distance, timing and what it means for you."
         />
         <span className="font-mono text-[0.6rem] uppercase tracking-widest text-ink-300 lg:pb-2">
-          Demo district model
+          District risk model
         </span>
       </div>
 

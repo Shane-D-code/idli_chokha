@@ -15,13 +15,13 @@ const PIPELINE = [
   { label: 'District Risk', sub: 'impact per district', icon: MapPinned },
 ]
 
-const MODELS: { name: string; kind: string; detail: string; status: 'PRODUCTION' | 'DEMO' }[] = [
-  { name: 'GENESIS', kind: 'Ensemble of gradient-boosted trees + random forest', detail: 'Blends an overnight forecast ensemble with local ocean/wind diagnostics.', status: 'DEMO' },
-  { name: 'DETECTION', kind: 'Deep CNN over 5-channel satellite tiles', detail: 'Returns a binary presence probability per 4h scan.', status: 'DEMO' },
-  { name: 'INTENSITY', kind: 'Sequence model on TCHP + shear + structure', detail: 'Regresses MSLP and wind in 6-hourly steps.', status: 'DEMO' },
-  { name: 'TRACK', kind: 'Trajectory transformer with ensemble spread', detail: 'Trajectory V12 outputs position + cross-track uncertainty.', status: 'DEMO' },
-  { name: 'LANDSLIDE', kind: 'Slope · soil moisture · rainfall fusion', detail: 'Fuses GSI slope classes with 72h rainfall and soil moisture.', status: 'DEMO' },
-  { name: 'HAZARD FUSION', kind: 'Multi-hazard impact summariser', detail: 'Combines rainfall, flood, surge, wind into a single impact deck.', status: 'DEMO' },
+const MODELS: { name: string; kind: string; detail: string }[] = [
+  { name: 'GENESIS', kind: 'Ensemble of gradient-boosted trees + random forest', detail: 'Blends an overnight forecast ensemble with local ocean/wind diagnostics.' },
+  { name: 'DETECTION', kind: 'Deep CNN over 5-channel satellite tiles', detail: 'Returns a binary presence probability per 4h scan.' },
+  { name: 'INTENSITY', kind: 'Sequence model on TCHP + shear + structure', detail: 'Regresses MSLP and wind in 6-hourly steps.' },
+  { name: 'TRACK', kind: 'Trajectory transformer with ensemble spread', detail: 'Trajectory V12 outputs position + cross-track uncertainty.' },
+  { name: 'LANDSLIDE', kind: 'Slope · soil moisture · rainfall fusion', detail: 'Fuses GSI slope classes with 72h rainfall and soil moisture.' },
+  { name: 'HAZARD FUSION', kind: 'Multi-hazard impact summariser', detail: 'Combines rainfall, flood, surge, wind into a single impact deck.' },
 ]
 
 export function Explain() {
@@ -63,7 +63,7 @@ export function Explain() {
         </div>
       </div>
       <p className="mt-4 font-mono text-[0.56rem] text-ink-400">
-        Each stage stands in for the exact production component; simulated fixtures drive the outputs you see on this page.
+        Each stage stands in for the exact production component; fixture data drives the outputs you see on this page.
       </p>
 
       {/* ---- model registry: open rows ---- */}
@@ -80,7 +80,6 @@ export function Explain() {
             >
               <div className="col-span-12 sm:col-span-3">
                 <span className="font-mono text-[0.8rem] font-bold tracking-wider text-brand-600">{m.name}</span>
-                <span className="ml-2 font-mono text-[0.54rem] font-semibold uppercase tracking-wider text-ink-400">{m.status}</span>
               </div>
               <p className="col-span-12 text-[0.82rem] font-semibold text-ink-800 sm:col-span-4">{m.kind}</p>
               <p className="col-span-12 text-[0.75rem] leading-relaxed text-ink-500 sm:col-span-5">{m.detail}</p>
